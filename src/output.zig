@@ -12,11 +12,23 @@ pub fn add(
     river_output: *river.OutputV1,
     wm: *types.WindowManager,
 ) !void {
+    for (wm.output_list.items, 0..) |*output, idx| {
+        if (output.river_output != null) continue;
+
+        output.river_output = river_output;
+        output.river_layer_shell_output = getLayerShellOutput(river_output, wm);
+
+        wm.focused_output_idx = idx;
+        river_output.setListener(*types.WindowManager, outputListener, wm);
+        return;
+    }
+
     var workspaces: std.ArrayList(types.Workspace) = .empty;
     var number_of_workspaces: i32 = 10;
     if (wm.getConfig().dynamic_workspaces) {
         number_of_workspaces = 1;
     }
+
     while (number_of_workspaces > 0) : (number_of_workspaces -= 1) {
         const workspace = types.Workspace{
             .window_list = .empty,
@@ -33,9 +45,9 @@ pub fn add(
         .focused_workspace_idx = 0,
         .rectangle = undefined,
         .non_exclusive = undefined,
-        .is_removed = false,
     };
     try wm.output_list.append(allocator, output);
+
     wm.focused_output_idx = wm.output_list.items.len - 1;
     river_output.setListener(*types.WindowManager, outputListener, wm);
 }
@@ -64,6 +76,7 @@ fn outputListener(
 ) void {
     for (wm.output_list.items, 0..) |*output, idx| {
         if (output.river_output != river_output) continue;
+
         switch (event) {
             .dimensions => |dimensions| {
                 output.rectangle.width = dimensions.width;
@@ -74,23 +87,24 @@ fn outputListener(
                 output.rectangle.y = position.y;
             },
             .removed => {
-                output.is_removed = true;
-                wm.status = .layout;
+                river_output.destroy();
+                output.river_output = null;
 
+                const focused = wm.focused_output_idx orelse return;
                 if (wm.output_list.items.len == 1) {
                     wm.focused_output_idx = null;
-                    wm.previous_workspace = null;
-                } else if (wm.focused_output_idx == wm.output_list.items.len - 1) {
-                    wm.focused_output_idx = @min(idx, wm.output_list.items.len - 2);
+                } else if (idx <= focused) {
+                    wm.focused_output_idx = @max(focused - 1, 0);
                 }
 
                 const previous_workspace = wm.previous_workspace orelse return;
                 if (previous_workspace.output_idx == idx) {
                     wm.previous_workspace = null;
-                } else if (previous_workspace.output_idx == wm.output_list.items.len - 1) {
-                    wm.previous_workspace.?.output_idx =
-                        @min(idx, wm.output_list.items.len - 2);
+                } else if (idx <= previous_workspace.output_idx) {
+                    wm.previous_workspace.?.output_idx -= 1;
                 }
+
+                wm.status = .layout;
             },
             else => {},
         }
@@ -105,6 +119,7 @@ fn layerShellOutputListener(
 ) void {
     for (wm.output_list.items) |*output| {
         if (output.river_layer_shell_output != layer_shell_output) continue;
+
         switch (event) {
             .non_exclusive_area => |area| {
                 output.non_exclusive = .{

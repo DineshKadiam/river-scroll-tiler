@@ -17,6 +17,8 @@ pub fn apply(
     const eased = 1 - std.math.pow(f32, 1 - progress, 3);
 
     for (output_list.items, 0..) |*output, output_idx| {
+        const river_output = output.river_output orelse continue;
+
         for (output.workspace_list.items, 0..) |*workspace, workspace_idx| {
             for (workspace.window_list.items, 0..) |*window, window_idx| {
                 const start = window.start orelse continue;
@@ -49,7 +51,7 @@ pub fn apply(
                             workspace_idx == output.focused_workspace_idx and
                             window_idx == workspace.focused_window_idx;
 
-                        if (is_focused) window.river_window.fullscreen(output.river_output);
+                        if (is_focused) window.river_window.fullscreen(river_output);
                         window.river_window.informFullscreen();
                     } else {
                         window.river_window.informNotFullscreen();

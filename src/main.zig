@@ -120,8 +120,10 @@ fn windowManagerListener(
     wm: *types.WindowManager,
 ) void {
     switch (event) {
-        .output => |output_event| output.add(wm.allocator, output_event.id, wm) catch |err|
-            std.debug.print("Failed to add output: {}\n", .{err}),
+        .output => |output_event| {
+            output.add(wm.allocator, output_event.id, wm) catch |err|
+                std.debug.print("Failed to add output: {}\n", .{err});
+        },
         .seat => |seat_event| {
             wm.river_seat = seat_event.id;
             seat_event.id.setListener(*types.WindowManager, seat.seatListener, wm);
@@ -170,7 +172,7 @@ fn manage(allocator: Allocator, io: Io, wm: *types.WindowManager) void {
         .layout => {
             layout.apply(
                 allocator,
-                &wm.output_list,
+                wm.output_list,
                 focused_output_idx,
                 wm.getConfig(),
                 river_seat,

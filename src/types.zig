@@ -9,17 +9,15 @@ pub const WindowManager = struct {
     allocator: Allocator,
     io: Io,
     environ_map: std.process.Environ.Map,
+
     registry: *wayland.client.wl.Registry,
+
     river_window_manager: ?*river.WindowManagerV1,
     river_xkb_bindings: ?*river.XkbBindingsV1,
     river_layer_shell: ?*river.LayerShellV1,
     river_seat: ?*river.SeatV1,
+
     output_list: std.ArrayList(Output),
-    focused_output_idx: ?usize,
-    previous_workspace: ?struct { output_idx: usize, workspace_idx: usize },
-    status: Status,
-    config: ?*Config,
-    is_passthrough: bool = false,
     xkb_binding_list: std.ArrayList(struct {
         river_xkb_binding: *river.XkbBindingV1,
         action: KeybindingAction,
@@ -28,6 +26,12 @@ pub const WindowManager = struct {
         river_pointer_binding: *river.PointerBindingV1,
         action: PointerAction,
     }),
+
+    config: ?*Config,
+    status: Status,
+    focused_output_idx: ?usize,
+    previous_workspace: ?struct { output_idx: usize, workspace_idx: usize },
+    is_passthrough: bool = false,
 
     pub fn getConfig(self: *WindowManager) Config {
         return if (self.config) |cfg| cfg.* else .{};
@@ -52,6 +56,21 @@ pub const WindowManager = struct {
     }
 };
 
+pub const Output = struct {
+    river_output: ?*river.OutputV1,
+    river_layer_shell_output: ?*river.LayerShellOutputV1,
+    workspace_list: std.ArrayList(Workspace),
+    focused_workspace_idx: usize,
+    rectangle: Rectangle,
+    non_exclusive: Rectangle,
+};
+
+pub const Workspace = struct {
+    window_list: std.ArrayList(Window) = .empty,
+    focused_window_idx: ?usize = null,
+    is_floating: bool = false,
+};
+
 pub const Window = struct {
     river_window: *river.WindowV1,
     river_node: *river.NodeV1,
@@ -62,22 +81,6 @@ pub const Window = struct {
     current: Rectangle,
     start: ?Rectangle,
     finish: ?Rectangle,
-};
-
-pub const Workspace = struct {
-    window_list: std.ArrayList(Window) = .empty,
-    focused_window_idx: ?usize = null,
-    is_floating: bool = false,
-};
-
-pub const Output = struct {
-    river_output: *river.OutputV1,
-    river_layer_shell_output: ?*river.LayerShellOutputV1,
-    workspace_list: std.ArrayList(Workspace) = .empty,
-    focused_workspace_idx: usize,
-    rectangle: Rectangle,
-    non_exclusive: Rectangle,
-    is_removed: bool,
 };
 
 pub const Rectangle = struct {

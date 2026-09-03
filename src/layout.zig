@@ -13,13 +13,14 @@ const edges = river.WindowV1.Edges{
     .right = true,
 };
 
-pub var pending_windows: std.ArrayList(*river.WindowV1) = .empty;
+pub var pending_windows = std.ArrayList(*river.WindowV1).empty;
 
 pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) void {
-    for (output_list.items) |*output| {
+    for (output_list.items) |output| {
         for (output.workspace_list.items, 0..) |workspace, workspace_idx| {
             const workspace_offset = @as(i32, @intCast(workspace_idx)) -
                 @as(i32, @intCast(output.focused_workspace_idx));
+
             const y_offset = workspace_offset * output.rectangle.height;
 
             if (workspace.is_floating) {
@@ -29,8 +30,8 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
 
             const focused_window_idx = workspace.focused_window_idx orelse continue;
             const focused_window = &workspace.window_list.items[focused_window_idx];
-            var rectangle: types.Rectangle = undefined;
 
+            var placement_rect: types.Rectangle = undefined;
             const should_center = switch (config.center_focused_window) {
                 .never => false,
                 .always => true,
@@ -39,41 +40,43 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
 
             focusedWindowLayout(
                 focused_window,
-                &rectangle,
+                &placement_rect,
                 output,
                 config,
                 y_offset,
                 should_center,
             );
-            focused_window.finish = rectangle;
+            focused_window.finish = placement_rect;
 
-            rectangle.x += rectangle.width + config.horizontal_gap;
+            placement_rect.x += placement_rect.width + config.horizontal_gap;
             for (workspace.window_list.items[focused_window_idx + 1 ..]) |*window| {
                 unfocusedWindowLayout(
                     window,
-                    &rectangle,
+                    &placement_rect,
                     output,
                     config,
                     y_offset,
                 );
-                window.finish = rectangle;
-                rectangle.x += rectangle.width + config.horizontal_gap;
+                window.finish = placement_rect;
+                placement_rect.x += placement_rect.width + config.horizontal_gap;
             }
 
-            rectangle.x = focused_window.finish.?.x;
+            placement_rect.x = focused_window.finish.?.x;
             var window_idx = focused_window_idx;
+
             while (window_idx > 0) {
                 window_idx -= 1;
                 const window = &workspace.window_list.items[window_idx];
+
                 unfocusedWindowLayout(
                     window,
-                    &rectangle,
+                    &placement_rect,
                     output,
                     config,
                     y_offset,
                 );
-                rectangle.x -= config.horizontal_gap + rectangle.width;
-                window.finish = rectangle;
+                placement_rect.x -= config.horizontal_gap + placement_rect.width;
+                window.finish = placement_rect;
             }
 
             if (!should_center) snapToEdge(
@@ -87,7 +90,7 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
 
 fn floatingLayout(
     window_list: std.ArrayList(types.Window),
-    output: *types.Output,
+    output: types.Output,
     y_offset: i32,
 ) void {
     for (window_list.items) |*window| {
@@ -103,8 +106,8 @@ fn floatingLayout(
 
 fn focusedWindowLayout(
     window: *types.Window,
-    rectangle: *types.Rectangle,
-    output: *types.Output,
+    placement_rect: *types.Rectangle,
+    output: types.Output,
     config: types.Config,
     y_offset: i32,
     should_center: bool,
@@ -113,28 +116,31 @@ fn focusedWindowLayout(
     const base_width: f32 = @floatFromInt(non_exclusive.width - config.horizontal_gap);
     const width_with_gap: i32 = @trunc(base_width * window.proportion);
 
-    rectangle.* = .{
+    placement_rect.* = .{
         .width = width_with_gap - config.horizontal_gap,
         .height = non_exclusive.height - 2 * config.vertical_gap,
         .x = window.current.x,
         .y = non_exclusive.y + config.vertical_gap + y_offset,
     };
 
+    const left_bound = non_exclusive.x + config.horizontal_gap;
+    const right_bound = non_exclusive.x + non_exclusive.width;
+
     if (should_center) {
-        rectangle.x = non_exclusive.x +
-            @divTrunc(non_exclusive.width, 2) - @divTrunc(rectangle.width, 2);
-    } else if (rectangle.x < non_exclusive.x + config.horizontal_gap) {
-        rectangle.x = non_exclusive.x + config.horizontal_gap;
-    } else if (rectangle.x + width_with_gap > non_exclusive.x + non_exclusive.width) {
-        rectangle.x = @max(
-            non_exclusive.x + non_exclusive.width - width_with_gap,
-            non_exclusive.x + config.horizontal_gap,
+        const center = non_exclusive.x + @divTrunc(non_exclusive.width, 2);
+        placement_rect.x = center - @divTrunc(placement_rect.width, 2);
+    } else if (placement_rect.x < left_bound) {
+        placement_rect.x = left_bound;
+    } else if (placement_rect.x + width_with_gap > right_bound) {
+        placement_rect.x = @max(
+            right_bound - width_with_gap,
+            left_bound,
         );
     }
 
     if (window.is_fullscreen) {
-        rectangle.* = output.rectangle;
-        rectangle.y += y_offset;
+        placement_rect.* = output.rectangle;
+        placement_rect.y += y_offset;
     }
 
     window.start = window.current;
@@ -142,23 +148,23 @@ fn focusedWindowLayout(
 
 fn unfocusedWindowLayout(
     window: *types.Window,
-    rectangle: *types.Rectangle,
-    output: *types.Output,
+    placement_rect: *types.Rectangle,
+    output: types.Output,
     config: types.Config,
     y_offset: i32,
 ) void {
     if (window.is_fullscreen) {
-        rectangle.width = output.rectangle.width;
-        rectangle.height = output.rectangle.height;
-        rectangle.y = output.rectangle.y + y_offset;
+        placement_rect.width = output.rectangle.width;
+        placement_rect.height = output.rectangle.height;
+        placement_rect.y = output.rectangle.y + y_offset;
     } else {
         const non_exclusive = output.non_exclusive;
         const base_width: f32 = @floatFromInt(non_exclusive.width - config.horizontal_gap);
         const width_with_gap: i32 = @trunc(base_width * window.proportion);
 
-        rectangle.width = width_with_gap - config.horizontal_gap;
-        rectangle.height = non_exclusive.height - 2 * config.vertical_gap;
-        rectangle.y = non_exclusive.y + config.vertical_gap + y_offset;
+        placement_rect.width = width_with_gap - config.horizontal_gap;
+        placement_rect.height = non_exclusive.height - 2 * config.vertical_gap;
+        placement_rect.y = non_exclusive.y + config.vertical_gap + y_offset;
     }
     window.start = window.current;
 }
@@ -169,15 +175,21 @@ fn snapToEdge(
     gap: i32,
 ) void {
     var head_distance: ?i32 = null;
-    const head = window_list.items[0].finish.?.x;
-    const left = non_exclusive.x + gap;
-    if (head > left) head_distance = head - left;
+    const head_x = window_list.items[0].finish.?.x;
+    const left_bound = non_exclusive.x + gap;
+
+    if (head_x > left_bound) {
+        head_distance = head_x - left_bound;
+    }
 
     var tail_distance: ?i32 = null;
     const tail_window = window_list.items[window_list.items.len - 1];
-    const tail = tail_window.finish.?.x + tail_window.finish.?.width;
-    const right = non_exclusive.x + non_exclusive.width - gap;
-    if (tail < right) tail_distance = @min(right - tail, left - head);
+    const tail_x = tail_window.finish.?.x + tail_window.finish.?.width;
+    const right_bound = non_exclusive.x + non_exclusive.width - gap;
+
+    if (tail_x < right_bound) {
+        tail_distance = @min(right_bound - tail_x, left_bound - head_x);
+    }
 
     for (window_list.items) |*window| {
         const x = &window.finish.?.x;
@@ -191,7 +203,7 @@ fn snapToEdge(
 
 pub fn apply(
     allocator: Allocator,
-    output_list: *std.ArrayList(types.Output),
+    output_list: std.ArrayList(types.Output),
     focused_output_idx: usize,
     config: types.Config,
     river_seat: *river.SeatV1,
@@ -208,18 +220,9 @@ pub fn apply(
     var output_idx = output_list.items.len;
     while (output_idx > 0) {
         output_idx -= 1;
-        const output = &output_list.items[output_idx];
 
-        if (output.is_removed) {
-            for (output.workspace_list.items) |*workspace| {
-                for (workspace.window_list.items) |window| {
-                    window.river_window.close();
-                }
-                workspace.window_list.deinit(allocator);
-            }
-            _ = output_list.swapRemove(output_idx);
-            continue;
-        }
+        const output = &output_list.items[output_idx];
+        if (output.river_output == null) continue;
 
         for (output.workspace_list.items, 0..) |workspace, workspace_idx| {
             for (workspace.window_list.items, 0..) |window, window_idx| {
@@ -261,18 +264,20 @@ pub fn apply(
         if (config.dynamic_workspaces) {
             // remove empty workspaces in reverse order
             var i = output.workspace_list.items.len;
-            while (i > 0) : (i -= 1) {
-                const workspace = output.workspace_list.items[i - 1];
+            while (i > 0) {
+                i -= 1;
+
+                const workspace = output.workspace_list.items[i];
                 const window_count = workspace.window_list.items.len;
                 if (window_count > 0) continue;
-                if (output.focused_workspace_idx == i - 1) continue;
+                if (output.focused_workspace_idx == i) continue;
 
                 // remove the empty workspace from the array
-                _ = output.workspace_list.orderedRemove(i - 1);
+                _ = output.workspace_list.orderedRemove(i);
 
                 // make sure to keep track which workspace is focused
-                if (i - 1 < output.focused_workspace_idx and output.focused_workspace_idx != 0) {
-                    output.focused_workspace_idx -= 1;
+                if (i < output.focused_workspace_idx) {
+                    output.focused_workspace_idx = @max(0, output.focused_workspace_idx - 1);
                 }
             }
 
@@ -283,7 +288,10 @@ pub fn apply(
                 .is_floating = false,
             };
             output.workspace_list.append(allocator, final_workspace) catch |err| {
-                std.debug.print("could not add empty workspace for dynamic workspaces: {}\n", .{err});
+                std.debug.print(
+                    "could not add empty workspace for dynamic workspaces: {}\n",
+                    .{err},
+                );
             };
         }
 
