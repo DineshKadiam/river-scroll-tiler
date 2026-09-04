@@ -125,8 +125,9 @@ fn keybindingPressed(
             var proportion = window.proportion;
             if (window.is_maximized) proportion = 1.0;
 
+            const non_exclusive = output.non_exclusive orelse output.rect;
             const h_gap = wm.getConfig().horizontal_gap;
-            const base_width: f32 = @floatFromInt(output.non_exclusive.width - h_gap);
+            const base_width: f32 = @floatFromInt(non_exclusive.width - h_gap);
             const width_with_gap: i32 = @trunc(base_width * (proportion + increment));
             if (width_with_gap - h_gap < 2 * wm.getConfig().border.width) return;
 
@@ -660,8 +661,8 @@ fn getOutputAbove(
     const output = &wm.output_list.items[output_idx];
 
     for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = target_output.rectangle.y + target_output.rectangle.height;
-        if (edge != output.rectangle.y) continue;
+        const edge = target_output.rect.y + target_output.rect.height;
+        if (edge != output.rect.y) continue;
         return .{
             .output = target_output,
             .index = target_output_idx,
@@ -682,8 +683,8 @@ fn getOutputBelow(
     const output = &wm.output_list.items[output_idx];
 
     for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = output.rectangle.y + target_output.rectangle.height;
-        if (edge != target_output.rectangle.y) continue;
+        const edge = output.rect.y + target_output.rect.height;
+        if (edge != target_output.rect.y) continue;
         return .{
             .output = target_output,
             .index = target_output_idx,
@@ -704,8 +705,8 @@ fn getOutputLeft(
     const output = &wm.output_list.items[output_idx];
 
     for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = target_output.rectangle.x + target_output.rectangle.width;
-        if (edge != output.rectangle.x) continue;
+        const edge = target_output.rect.x + target_output.rect.width;
+        if (edge != output.rect.x) continue;
         return .{
             .output = target_output,
             .index = target_output_idx,
@@ -726,8 +727,8 @@ fn getOutputRight(
     const output = &wm.output_list.items[output_idx];
 
     for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = output.rectangle.x + target_output.rectangle.width;
-        if (edge != target_output.rectangle.x) continue;
+        const edge = output.rect.x + target_output.rect.width;
+        if (edge != target_output.rect.x) continue;
         return .{
             .output = target_output,
             .index = target_output_idx,

@@ -1,5 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
 const wayland = @import("wayland");
 const river = wayland.client.river;
@@ -8,7 +7,7 @@ const layout = @import("layout.zig");
 const types = @import("types.zig");
 
 pub fn add(
-    allocator: Allocator,
+    allocator: std.mem.Allocator,
     river_output: *river.OutputV1,
     wm: *types.WindowManager,
 ) !void {
@@ -43,8 +42,8 @@ pub fn add(
         .river_layer_shell_output = getLayerShellOutput(river_output, wm),
         .workspace_list = workspaces,
         .focused_workspace_idx = 0,
-        .rectangle = undefined,
-        .non_exclusive = undefined,
+        .rect = undefined,
+        .non_exclusive = null,
     };
     try wm.output_list.append(allocator, output);
 
@@ -79,12 +78,12 @@ fn outputListener(
 
         switch (event) {
             .dimensions => |dimensions| {
-                output.rectangle.width = dimensions.width;
-                output.rectangle.height = dimensions.height;
+                output.rect.width = dimensions.width;
+                output.rect.height = dimensions.height;
             },
             .position => |position| {
-                output.rectangle.x = position.x;
-                output.rectangle.y = position.y;
+                output.rect.x = position.x;
+                output.rect.y = position.y;
             },
             .removed => {
                 river_output.destroy();

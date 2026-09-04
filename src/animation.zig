@@ -41,10 +41,10 @@ pub fn apply(
                         .x = start.x + x_progress,
                         .y = start.y + y_progress,
                     };
-                    placeWindow(window, output.rectangle, config);
+                    placeWindow(window, output.rect, config);
                 } else {
                     window.current_rect = finish;
-                    placeWindow(window, output.rectangle, config);
+                    placeWindow(window, output.rect, config);
 
                     if (window.is_fullscreen) {
                         const is_focused = output_idx == focused_output_idx and
@@ -73,7 +73,7 @@ pub fn apply(
 
 fn placeWindow(
     window: *types.Window,
-    output_rectangle: types.Rectangle,
+    output_rect: types.Rectangle,
     config: types.Config,
 ) void {
     var border_width = config.border.width;
@@ -93,10 +93,10 @@ fn placeWindow(
     const window_top = window.current_rect.y;
     const window_bottom = window.current_rect.y + window.current_rect.height;
 
-    const output_left = output_rectangle.x;
-    const output_right = output_rectangle.x + output_rectangle.width;
-    const output_top = output_rectangle.y;
-    const output_bottom = output_rectangle.y + output_rectangle.height;
+    const output_left = output_rect.x;
+    const output_right = output_rect.x + output_rect.width;
+    const output_top = output_rect.y;
+    const output_bottom = output_rect.y + output_rect.height;
 
     if (output_left >= window_right or output_right <= window_left or
         output_top >= window_bottom or output_bottom <= window_top)
@@ -113,7 +113,7 @@ fn placeWindow(
 
     if (output_left < window_right and output_left > window_left) {
         clip_x = output_left - window_left;
-        clip_width = @min(window_right - output_left, output_rectangle.width);
+        clip_width = @min(window_right - output_left, output_rect.width);
     } else if (output_right > window_left and output_right < window_right) {
         clip_width = output_right - window_left;
     }

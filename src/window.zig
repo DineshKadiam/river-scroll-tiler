@@ -75,7 +75,7 @@ fn add(
     output: *types.Output,
     config: types.Config,
 ) !void {
-    const non_exclusive = output.non_exclusive;
+    const non_exclusive = output.non_exclusive orelse output.rect;
     const h_gap = config.horizontal_gap;
     const v_gap = config.vertical_gap;
 

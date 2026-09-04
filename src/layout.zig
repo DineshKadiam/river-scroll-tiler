@@ -16,11 +16,13 @@ pub var pending_windows = std.ArrayList(*river.WindowV1).empty;
 
 pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) void {
     for (output_list.items) |output| {
+        const non_exclusive = output.non_exclusive orelse output.rect;
+
         for (output.workspace_list.items, 0..) |workspace, workspace_idx| {
             const workspace_offset = @as(i32, @intCast(workspace_idx)) -
                 @as(i32, @intCast(output.focused_workspace_idx));
 
-            const y_offset = workspace_offset * output.rectangle.height;
+            const y_offset = workspace_offset * output.rect.height;
 
             if (workspace.is_floating) {
                 floatingLayout(workspace.window_list, output, config, y_offset);
@@ -80,7 +82,7 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
 
             if (!should_center) snapToEdge(
                 workspace.window_list,
-                output.non_exclusive,
+                non_exclusive,
                 config.horizontal_gap,
             );
         }
@@ -93,12 +95,12 @@ fn floatingLayout(
     config: types.Config,
     y_offset: i32,
 ) void {
-    const non_exclusive = output.non_exclusive;
-    const h_gap = config.horizontal_gap;
-    const v_gap = config.vertical_gap;
-
     for (window_list.items) |*window| {
         if (window.is_maximized) {
+            const non_exclusive = output.non_exclusive orelse output.rect;
+            const h_gap = config.horizontal_gap;
+            const v_gap = config.vertical_gap;
+
             window.finish_rect = .{
                 .width = non_exclusive.width - 2 * h_gap,
                 .height = non_exclusive.height - 2 * v_gap,
@@ -106,10 +108,11 @@ fn floatingLayout(
                 .y = non_exclusive.y + v_gap,
             };
         } else if (window.is_fullscreen) {
-            window.finish_rect = output.rectangle;
+            window.finish_rect = output.rect;
         } else {
             window.finish_rect = window.floating_rect;
         }
+
         window.start_rect = window.current_rect;
         window.finish_rect.?.y += y_offset;
     }
@@ -123,7 +126,7 @@ fn focusedWindowLayout(
     y_offset: i32,
     should_center: bool,
 ) void {
-    const non_exclusive = output.non_exclusive;
+    const non_exclusive = output.non_exclusive orelse output.rect;
     const h_gap = config.horizontal_gap;
     const v_gap = config.vertical_gap;
 
@@ -156,7 +159,7 @@ fn focusedWindowLayout(
     }
 
     if (window.is_fullscreen) {
-        placement_rect.* = output.rectangle;
+        placement_rect.* = output.rect;
         placement_rect.y += y_offset;
     }
 
@@ -171,11 +174,11 @@ fn unfocusedWindowLayout(
     y_offset: i32,
 ) void {
     if (window.is_fullscreen) {
-        placement_rect.width = output.rectangle.width;
-        placement_rect.height = output.rectangle.height;
-        placement_rect.y = output.rectangle.y + y_offset;
+        placement_rect.width = output.rect.width;
+        placement_rect.height = output.rect.height;
+        placement_rect.y = output.rect.y + y_offset;
     } else {
-        const non_exclusive = output.non_exclusive;
+        const non_exclusive = output.non_exclusive orelse output.rect;
         const h_gap = config.horizontal_gap;
         const v_gap = config.vertical_gap;
 
@@ -189,6 +192,7 @@ fn unfocusedWindowLayout(
         placement_rect.height = non_exclusive.height - 2 * v_gap;
         placement_rect.y = non_exclusive.y + v_gap + y_offset;
     }
+
     window.start_rect = window.current_rect;
 }
 

@@ -48,10 +48,10 @@ pub fn seatListener(
         .op_delta => |delta| {
             const start = window.start_rect orelse return;
 
-            const output_left = output.rectangle.x;
-            const output_right = output.rectangle.x + output.rectangle.width;
-            const output_top = output.rectangle.y;
-            const output_bottom = output.rectangle.y + output.rectangle.height;
+            const output_left = output.rect.x;
+            const output_right = output.rect.x + output.rect.width;
+            const output_top = output.rect.y;
+            const output_bottom = output.rect.y + output.rect.height;
 
             switch (wm.status.pointer_action) {
                 .move_window => {

@@ -61,8 +61,8 @@ pub const Output = struct {
     river_layer_shell_output: ?*river.LayerShellOutputV1,
     workspace_list: std.ArrayList(Workspace),
     focused_workspace_idx: usize,
-    rectangle: Rectangle,
-    non_exclusive: Rectangle,
+    rect: Rectangle,
+    non_exclusive: ?Rectangle,
 };
 
 pub const Workspace = struct {
