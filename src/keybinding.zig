@@ -1,6 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const Io = std.Io;
 
 const wayland = @import("wayland");
 const xkbcommon = @import("xkbcommon");
@@ -10,7 +8,10 @@ const config = @import("config.zig");
 const layout = @import("layout.zig");
 const types = @import("types.zig");
 
-pub fn setupKeybindings(allocator: Allocator, wm: *types.WindowManager) !void {
+pub fn setupKeybindings(
+    allocator: std.mem.Allocator,
+    wm: *types.WindowManager,
+) !void {
     for (wm.xkb_binding_list.items) |binding| binding.river_xkb_binding.destroy();
     wm.xkb_binding_list.clearRetainingCapacity();
 
@@ -62,10 +63,10 @@ fn xkbBindingListener(
     if (wm.status == .pointer_action) return;
     for (wm.xkb_binding_list.items) |binding| {
         if (binding.river_xkb_binding != xkb_binding) continue;
+
         switch (event) {
             .pressed => {
                 const action = binding.action;
-
                 // if we are in passthrough mode and we are not trying to toggle it then
                 // go ahead and forego checking the action.
                 if (wm.is_passthrough and action != .toggle_passthrough) continue;
@@ -73,9 +74,9 @@ fn xkbBindingListener(
                 keybindingPressed(
                     wm.allocator,
                     wm.io,
+                    wm.environ_map,
                     action,
                     wm,
-                    wm.environ_map,
                 ) catch |err| {
                     std.debug.print("Keybinding's action failed: {}\n", .{err});
                 };
@@ -87,11 +88,11 @@ fn xkbBindingListener(
 }
 
 fn keybindingPressed(
-    allocator: Allocator,
-    io: Io,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    environ_map: std.process.Environ.Map,
     action: types.KeybindingAction,
     wm: *types.WindowManager,
-    environ_map: std.process.Environ.Map,
 ) !void {
     const output_idx = wm.focused_output_idx orelse return;
     const output = &wm.output_list.items[output_idx];
@@ -102,37 +103,42 @@ fn keybindingPressed(
         .close_window => {
             const window_idx = workspace.focused_window_idx orelse return;
             const window = &workspace.window_list.items[window_idx];
-            window.is_closing = true;
+            window.should_close = true;
+        },
+        .toggle_maximize => {
+            const window_idx = workspace.focused_window_idx orelse return;
+            var window = &workspace.window_list.items[window_idx];
+            if (window.is_fullscreen) return;
+            window.is_maximized = !window.is_maximized;
         },
         .toggle_fullscreen => {
             const window_idx = workspace.focused_window_idx orelse return;
             const window = &workspace.window_list.items[window_idx];
             window.is_fullscreen = !window.is_fullscreen;
         },
-        .toggle_maximize_column => {
-            if (workspace.is_floating) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            var window = &workspace.window_list.items[window_idx];
-            window.proportion = if (window.proportion == 1.0) 0.5 else 1.0;
-        },
-        .toggle_passthrough => wm.is_passthrough = !wm.is_passthrough,
         .adjust_window_width => |increment| {
             if (workspace.is_floating) return;
             const window_idx = workspace.focused_window_idx orelse return;
             var window = &workspace.window_list.items[window_idx];
             if (window.is_fullscreen) return;
 
-            const gap = wm.getConfig().horizontal_gap;
-            const base_width: f32 = @floatFromInt(output.non_exclusive.width - gap);
-            const width_with_gap: i32 = @trunc(base_width * (window.proportion + increment));
-            if (width_with_gap - gap < 2 * wm.getConfig().border.width) return;
+            var proportion = window.proportion;
+            if (window.is_maximized) proportion = 1.0;
 
-            window.proportion += increment;
+            const h_gap = wm.getConfig().horizontal_gap;
+            const base_width: f32 = @floatFromInt(output.non_exclusive.width - h_gap);
+            const width_with_gap: i32 = @trunc(base_width * (proportion + increment));
+            if (width_with_gap - h_gap < 2 * wm.getConfig().border.width) return;
+
+            window.is_maximized = false;
+            window.proportion = proportion + increment;
         },
         .set_window_width => |proportion| {
             if (workspace.is_floating) return;
             const window_idx = workspace.focused_window_idx orelse return;
             var window = &workspace.window_list.items[window_idx];
+            if (window.is_fullscreen) return;
+            window.is_maximized = false;
             window.proportion = proportion;
         },
         .focus_window_left => {
@@ -294,7 +300,9 @@ fn keybindingPressed(
             continue :action_switch .move_window_to_workspace_below;
         },
         .move_window_to_workspace_number => |number| {
-            if (number == 0 or number > output.workspace_list.items.len or number - 1 == workspace_idx) return;
+            if (number == 0 or
+                number > output.workspace_list.items.len or
+                number - 1 == workspace_idx) return;
             const window_idx = workspace.focused_window_idx orelse return;
             const target_window_idx = try sendWindowToWorkspace(
                 allocator,
@@ -345,7 +353,9 @@ fn keybindingPressed(
             continue :action_switch .send_window_to_workspace_below;
         },
         .send_window_to_workspace_number => |number| {
-            if (number == 0 or number > output.workspace_list.items.len or number - 1 == workspace_idx) return;
+            if (number == 0 or
+                number > output.workspace_list.items.len or
+                number - 1 == workspace_idx) return;
             const window_idx = workspace.focused_window_idx orelse return;
             _ = try sendWindowToWorkspace(
                 allocator,
@@ -503,8 +513,15 @@ fn keybindingPressed(
                 target.output.focused_workspace_idx,
             );
         },
-        .exit => {
-            wm.status = .exit;
+        .spawn => |command| {
+            const pid = std.posix.system.fork();
+            if (pid < 0) {
+                return error.ForkFailed;
+            } else if (pid == 0) {
+                _ = try std.process.spawn(io, .{ .argv = command });
+                std.process.exit(0);
+            }
+            _ = std.posix.system.waitpid(pid, null, 0);
             return;
         },
         .reload_config => {
@@ -524,15 +541,9 @@ fn keybindingPressed(
             wm.status = .setup_bindings;
             return;
         },
-        .spawn => |command| {
-            const pid = std.posix.system.fork();
-            if (pid < 0) {
-                return error.ForkFailed;
-            } else if (pid == 0) {
-                _ = try std.process.spawn(io, .{ .argv = command });
-                std.process.exit(0);
-            }
-            _ = std.posix.system.waitpid(pid, null, 0);
+        .toggle_passthrough => wm.is_passthrough = !wm.is_passthrough,
+        .exit => {
+            wm.status = .exit;
             return;
         },
     }
@@ -543,7 +554,7 @@ fn keybindingPressed(
 
 // Move a window to a target workspace.
 fn moveWindowToWorkspace(
-    allocator: Allocator,
+    allocator: std.mem.Allocator,
     window_idx: usize,
     workspace: *types.Workspace,
     target_workspace: *types.Workspace,
@@ -566,7 +577,7 @@ fn moveWindowToWorkspace(
 
 // Sends a window to a workspace found on an output.
 fn sendWindowToWorkspace(
-    allocator: Allocator,
+    allocator: std.mem.Allocator,
     wm: *types.WindowManager,
     window_idx: usize,
     target_output_idx: usize,

@@ -75,12 +75,13 @@ pub const Window = struct {
     river_window: *river.WindowV1,
     river_node: *river.NodeV1,
     proportion: f32,
+    should_close: bool,
+    is_maximized: bool,
     is_fullscreen: bool,
-    is_closing: bool,
-    floating: Rectangle,
-    current: Rectangle,
-    start: ?Rectangle,
-    finish: ?Rectangle,
+    floating_rect: Rectangle,
+    current_rect: Rectangle,
+    start_rect: ?Rectangle,
+    finish_rect: ?Rectangle,
 };
 
 pub const Rectangle = struct {
@@ -153,9 +154,8 @@ const Keybinding = struct {
 
 pub const KeybindingAction = union(enum) {
     close_window: void,
+    toggle_maximize: void,
     toggle_fullscreen: void,
-    toggle_maximize_column: void,
-    toggle_passthrough: void,
     adjust_window_width: f32,
     set_window_width: f32,
     focus_window_left: void,
@@ -195,9 +195,10 @@ pub const KeybindingAction = union(enum) {
     send_window_to_output_right: void,
     send_window_to_output_above: void,
     send_window_to_output_below: void,
-    exit: void,
-    reload_config: void,
     spawn: []const []const u8,
+    reload_config: void,
+    toggle_passthrough: void,
+    exit: void,
 };
 
 const PointerBinding = struct {
@@ -216,7 +217,8 @@ const PointerAction = enum { move_window, resize_window };
 
 pub const default_keybindings = [_]Keybinding{
     .{ .key = "q", .modifiers = .{ .mod4 = true }, .action = .close_window },
-    .{ .key = "f", .modifiers = .{ .mod4 = true }, .action = .toggle_fullscreen },
+    .{ .key = "f", .modifiers = .{ .mod4 = true }, .action = .toggle_maximize },
+    .{ .key = "f", .modifiers = .{ .mod4 = true, .shift = true }, .action = .toggle_fullscreen },
 
     .{ .key = "minus", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = -0.1 } },
     .{ .key = "equal", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = 0.1 } },

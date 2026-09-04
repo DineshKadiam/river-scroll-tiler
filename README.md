@@ -28,7 +28,8 @@ Run `rill` in [river's init file](https://codeberg.org/river/river#usage), or di
 | Keybinding | Action |
 |----------|--------|
 | `Super` `q` | Close window |
-| `Super` `f` | Toggle fullscreen |
+| `Super` `f` | Toggle maximize |
+| `Super` `Shift` `f` | Toggle fullscreen |
 | `Super` `minus` | Decrease window's width by a proportion of 0.1 |
 | `Super` `equal` | Increase window's width by a proportion of 0.1 |
 | `Super` `BackSpace` | Set window's width to a proportion of 0.5 |

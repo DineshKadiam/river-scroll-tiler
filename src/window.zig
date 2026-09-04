@@ -1,5 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
 const wayland = @import("wayland");
 const river = wayland.client.river;
@@ -63,6 +62,7 @@ pub fn windowListener(
 
                 layout.update(wm.output_list, wm.getConfig());
                 wm.status = .layout;
+
                 return;
             }
         }
@@ -70,26 +70,42 @@ pub fn windowListener(
 }
 
 fn add(
-    allocator: Allocator,
+    allocator: std.mem.Allocator,
     river_window: *river.WindowV1,
     output: *types.Output,
     config: types.Config,
 ) !void {
+    const non_exclusive = output.non_exclusive;
+    const h_gap = config.horizontal_gap;
+    const v_gap = config.vertical_gap;
+
+    const base_width: f32 = @floatFromInt(non_exclusive.width - h_gap);
+    const width_with_gap: i32 = @trunc(base_width * config.default_window_width);
+
+    const initial_rect = types.Rectangle{
+        .width = width_with_gap - h_gap,
+        .height = non_exclusive.height - 2 * v_gap,
+        .x = non_exclusive.x + non_exclusive.width - width_with_gap,
+        .y = non_exclusive.y + v_gap,
+    };
+
     const window = types.Window{
         .river_window = river_window,
         .river_node = try river_window.getNode(),
         .proportion = config.default_window_width,
+        .should_close = false,
+        .is_maximized = false,
         .is_fullscreen = false,
-        .is_closing = false,
-        .floating = layout.initialRectangle(output.non_exclusive, config),
-        .current = layout.initialRectangle(output.non_exclusive, config),
-        .start = null,
-        .finish = null,
+        .floating_rect = initial_rect,
+        .current_rect = initial_rect,
+        .start_rect = null,
+        .finish_rect = null,
     };
 
     const workspace = &output.workspace_list.items[output.focused_workspace_idx];
     var window_idx: usize = 0;
     if (workspace.focused_window_idx) |idx| window_idx = idx + 1;
+
     try workspace.window_list.insert(allocator, window_idx, window);
     workspace.focused_window_idx = window_idx;
 }

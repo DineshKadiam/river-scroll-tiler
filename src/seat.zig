@@ -1,5 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
 const wayland = @import("wayland");
 const river = wayland.client.river;
@@ -41,12 +40,13 @@ pub fn seatListener(
 
                     layout.update(wm.output_list, wm.getConfig());
                     wm.status = .layout;
+
                     return;
                 }
             }
         },
         .op_delta => |delta| {
-            const start = window.start orelse return;
+            const start = window.start_rect orelse return;
 
             const output_left = output.rectangle.x;
             const output_right = output.rectangle.x + output.rectangle.width;
@@ -55,41 +55,41 @@ pub fn seatListener(
 
             switch (wm.status.pointer_action) {
                 .move_window => {
-                    window.floating.x = std.math.clamp(
+                    window.floating_rect.x = std.math.clamp(
                         start.x + delta.dx,
                         output_left,
-                        output_right - window.current.width,
+                        output_right - window.current_rect.width,
                     );
-                    window.floating.y = std.math.clamp(
+                    window.floating_rect.y = std.math.clamp(
                         start.y + delta.dy,
                         output_top,
-                        output_bottom - window.current.height,
+                        output_bottom - window.current_rect.height,
                     );
                 },
                 .resize_window => {
-                    window.floating.width = std.math.clamp(
+                    window.floating_rect.width = std.math.clamp(
                         start.width + delta.dx,
                         0,
-                        output_right - window.current.x,
+                        output_right - window.current_rect.x,
                     );
-                    window.floating.height = std.math.clamp(
+                    window.floating_rect.height = std.math.clamp(
                         start.height + delta.dy,
                         0,
-                        output_bottom - window.current.y,
+                        output_bottom - window.current_rect.y,
                     );
                 },
             }
-            window.current = window.floating;
+            window.current_rect = window.floating_rect;
         },
         .op_release => {
             wm.status = .none;
-            window.start = null;
+            window.start_rect = null;
         },
         else => {},
     }
 }
 
-pub fn setupPointerBindings(allocator: Allocator, wm: *types.WindowManager) !void {
+pub fn setupPointerBindings(allocator: std.mem.Allocator, wm: *types.WindowManager) !void {
     for (wm.pointer_binding_list.items) |binding| binding.river_pointer_binding.destroy();
     wm.pointer_binding_list.clearRetainingCapacity();
 
@@ -116,6 +116,7 @@ fn pointerBindingListener(
 
     for (wm.pointer_binding_list.items) |binding| {
         if (binding.river_pointer_binding != pointer_binding) continue;
+
         switch (event) {
             .pressed => {
                 const output_idx = wm.focused_output_idx orelse return;
@@ -126,8 +127,8 @@ fn pointerBindingListener(
                 const window_idx = workspace.focused_window_idx orelse return;
                 const window = &workspace.window_list.items[window_idx];
                 if (window.is_fullscreen) return;
-                window.start = window.current;
 
+                window.start_rect = window.current_rect;
                 wm.status = .{ .pointer_action = binding.action };
             },
             else => {},
@@ -163,11 +164,11 @@ pub fn pointerAction(
     if (window.is_fullscreen) border_width = 0;
 
     window.river_window.proposeDimensions(
-        @max(0, window.current.width - 2 * border_width),
-        @max(0, window.current.height - 2 * border_width),
+        @max(0, window.current_rect.width - 2 * border_width),
+        @max(0, window.current_rect.height - 2 * border_width),
     );
     window.river_node.setPosition(
-        window.current.x + border_width,
-        window.current.y + border_width,
+        window.current_rect.x + border_width,
+        window.current_rect.y + border_width,
     );
 }
