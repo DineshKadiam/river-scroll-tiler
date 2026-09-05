@@ -1,6 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const Io = std.Io;
 
 const wayland = @import("wayland");
 const river = wayland.client.river;
@@ -29,8 +27,6 @@ pub fn main(init: std.process.Init) !void {
     const display = try wayland.client.wl.Display.connect(null);
     defer display.disconnect();
 
-    const cfg = config.load(init.gpa, init.io, init.environ_map.*);
-
     var wm = types.WindowManager{
         .allocator = init.gpa,
         .io = init.io,
@@ -43,7 +39,7 @@ pub fn main(init: std.process.Init) !void {
         .output_list = .empty,
         .focused_output_idx = null,
         .previous_workspace = null,
-        .config = cfg,
+        .config = config.load(init.gpa, init.io, init.environ_map.*),
         .xkb_binding_list = .empty,
         .pointer_binding_list = .empty,
         .status = .none,
@@ -59,25 +55,11 @@ pub fn main(init: std.process.Init) !void {
     };
     window_manager.setListener(*types.WindowManager, windowManagerListener, &wm);
 
-    const loaded_config = wm.getConfig();
-    for (loaded_config.spawn_at_startup) |command| {
-        _ = std.process.spawn(wm.io, .{ .argv = command }) catch |err| {
-            std.debug.print("Failed to spawn {s}: {}\n", .{ command[0], err });
-        };
-    }
-
-    var workspaces_to_create: i32 = 10;
-    if (loaded_config.dynamic_workspaces) {
-        workspaces_to_create = 1;
-    }
-    for (wm.output_list.items) |*my_output| {
-        while (workspaces_to_create > 0) : (workspaces_to_create -= 1) {
-            const workspace = types.Workspace{
-                .window_list = .empty,
-                .focused_window_idx = null,
-                .is_floating = false,
+    if (wm.config.spawn_at_startup) |commands| {
+        for (commands) |command| {
+            _ = std.process.spawn(wm.io, .{ .argv = command }) catch |err| {
+                std.debug.print("Failed to spawn {s}: {}\n", .{ command[0], err });
             };
-            try my_output.workspace_list.append(wm.allocator, workspace);
         }
     }
 
@@ -125,12 +107,8 @@ fn windowManagerListener(
                 std.debug.print("Failed to add output: {}\n", .{err});
         },
         .seat => |seat_event| {
-            wm.river_seat = seat_event.id;
             seat_event.id.setListener(*types.WindowManager, seat.seatListener, wm);
-
-            if (wm.getConfig().cursor) |cursor| {
-                seat_event.id.setXcursorTheme(cursor.theme, cursor.size);
-            }
+            wm.river_seat = seat_event.id;
             wm.status = .setup_bindings;
 
             const layer_shell = wm.river_layer_shell orelse {
@@ -161,8 +139,12 @@ fn windowManagerListener(
     }
 }
 
-fn manage(allocator: Allocator, io: Io, wm: *types.WindowManager) void {
+fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) void {
     const focused_output_idx = wm.focused_output_idx orelse return;
+    const river_window_manager = wm.river_window_manager orelse {
+        std.debug.print("Failed to find window manager\n", .{});
+        return;
+    };
     const river_seat = wm.river_seat orelse {
         std.debug.print("Failed to find seat\n", .{});
         return;
@@ -174,25 +156,29 @@ fn manage(allocator: Allocator, io: Io, wm: *types.WindowManager) void {
                 allocator,
                 wm.output_list,
                 focused_output_idx,
-                wm.getConfig(),
+                wm.config,
                 river_seat,
             );
             wm.status = .{
-                .animation = Io.Clock.awake.now(io).toMilliseconds(),
+                .animation = std.Io.Clock.awake.now(io).toMilliseconds(),
             };
         },
         .animation => |start_time| {
             wm.status = animation.apply(
                 wm.output_list,
                 focused_output_idx,
-                wm.getConfig(),
+                wm.config,
                 start_time,
-                Io.Clock.awake.now(io).toMilliseconds(),
+                std.Io.Clock.awake.now(io).toMilliseconds(),
             );
         },
         .pointer_action => {
             river_seat.opStartPointer();
-            seat.pointerAction(wm.output_list, focused_output_idx, wm.getConfig());
+            seat.pointerAction(
+                wm.output_list,
+                focused_output_idx,
+                wm.config.border.width,
+            );
         },
         .setup_bindings => {
             keybinding.setupKeybindings(allocator, wm) catch |err| {
@@ -202,12 +188,16 @@ fn manage(allocator: Allocator, io: Io, wm: *types.WindowManager) void {
                 std.debug.print("Failed to setup pointer bindings: {}\n", .{err});
             };
 
+            if (wm.config.cursor) |cursor| {
+                river_seat.setXcursorTheme(cursor.theme, cursor.size);
+            }
+
             wm.status = .layout;
-            wm.river_window_manager.?.manageDirty();
+            river_window_manager.manageDirty();
         },
         .exit => {
+            river_window_manager.exitSession();
             wm.deinit();
-            wm.river_window_manager.?.exitSession();
         },
         .none => river_seat.opEnd(),
     }

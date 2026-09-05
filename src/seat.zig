@@ -3,6 +3,7 @@ const std = @import("std");
 const wayland = @import("wayland");
 const river = wayland.client.river;
 
+const config = @import("config.zig");
 const layout = @import("layout.zig");
 const types = @import("types.zig");
 
@@ -38,7 +39,7 @@ pub fn seatListener(
                         };
                     }
 
-                    layout.update(wm.output_list, wm.getConfig());
+                    layout.update(wm.output_list, wm.config);
                     wm.status = .layout;
 
                     return;
@@ -89,19 +90,29 @@ pub fn seatListener(
     }
 }
 
-pub fn setupPointerBindings(allocator: std.mem.Allocator, wm: *types.WindowManager) !void {
-    for (wm.pointer_binding_list.items) |binding| binding.river_pointer_binding.destroy();
+pub fn setupPointerBindings(
+    allocator: std.mem.Allocator,
+    wm: *types.WindowManager,
+) !void {
+    for (wm.pointer_binding_list.items) |pointer_binding| {
+        pointer_binding.river_pointer_binding.destroy();
+    }
     wm.pointer_binding_list.clearRetainingCapacity();
 
-    for (wm.getConfig().pointer_bindings) |binding| {
+    const pointer_bindings =
+        wm.config.pointer_bindings orelse &config.default_pointer_bindings;
+
+    for (pointer_bindings) |binding| {
         const pointer_binding = try wm.river_seat.?.getPointerBinding(
             @intFromEnum(binding.button),
             binding.modifiers,
         );
+
         try wm.pointer_binding_list.append(
             allocator,
             .{ .river_pointer_binding = pointer_binding, .action = binding.action },
         );
+
         pointer_binding.setListener(*types.WindowManager, pointerBindingListener, wm);
         pointer_binding.enable();
     }
@@ -151,7 +162,7 @@ pub fn layerShellSeatListener(
 pub fn pointerAction(
     output_list: std.ArrayList(types.Output),
     focused_output_idx: usize,
-    config: types.Config,
+    border_width: u8,
 ) void {
     const output = output_list.items[focused_output_idx];
     const workspace = output.workspace_list.items[output.focused_workspace_idx];
@@ -160,15 +171,15 @@ pub fn pointerAction(
 
     window.river_window.setClipBox(0, 0, 0, 0);
 
-    var border_width = config.border.width;
-    if (window.is_fullscreen) border_width = 0;
+    var border = border_width;
+    if (window.is_fullscreen) border = 0;
 
     window.river_window.proposeDimensions(
-        @max(0, window.current_rect.width - 2 * border_width),
-        @max(0, window.current_rect.height - 2 * border_width),
+        @max(0, window.current_rect.width - 2 * border),
+        @max(0, window.current_rect.height - 2 * border),
     );
     window.river_node.setPosition(
-        window.current_rect.x + border_width,
-        window.current_rect.y + border_width,
+        window.current_rect.x + border,
+        window.current_rect.y + border,
     );
 }

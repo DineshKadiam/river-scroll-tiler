@@ -22,25 +22,18 @@ pub fn add(
         return;
     }
 
-    var workspaces: std.ArrayList(types.Workspace) = .empty;
-    var number_of_workspaces: i32 = 10;
-    if (wm.getConfig().dynamic_workspaces) {
-        number_of_workspaces = 1;
-    }
+    var workspace_count: i32 = 10;
+    if (wm.config.dynamic_workspaces) workspace_count = 1;
 
-    while (number_of_workspaces > 0) : (number_of_workspaces -= 1) {
-        const workspace = types.Workspace{
-            .window_list = .empty,
-            .focused_window_idx = null,
-            .is_floating = false,
-        };
-        try workspaces.append(allocator, workspace);
+    var workspace_list = std.ArrayList(types.Workspace).empty;
+    while (workspace_count > 0) : (workspace_count -= 1) {
+        try workspace_list.append(allocator, .{});
     }
 
     const output = types.Output{
         .river_output = river_output,
         .river_layer_shell_output = getLayerShellOutput(river_output, wm),
-        .workspace_list = workspaces,
+        .workspace_list = workspace_list,
         .focused_workspace_idx = 0,
         .rect = undefined,
         .non_exclusive = null,
@@ -127,7 +120,8 @@ fn layerShellOutputListener(
                     .x = area.x,
                     .y = area.y,
                 };
-                layout.update(wm.output_list, wm.getConfig());
+
+                layout.update(wm.output_list, wm.config);
                 wm.status = .layout;
             },
         }

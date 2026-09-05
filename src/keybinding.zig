@@ -12,19 +12,23 @@ pub fn setupKeybindings(
     allocator: std.mem.Allocator,
     wm: *types.WindowManager,
 ) !void {
-    for (wm.xkb_binding_list.items) |binding| binding.river_xkb_binding.destroy();
-    wm.xkb_binding_list.clearRetainingCapacity();
-
     const xkb_bindings = wm.river_xkb_bindings orelse {
         std.debug.print("Failed to find xkb bindings\n", .{});
         return;
     };
 
-    for (wm.getConfig().keybindings) |keybinding| {
+    for (wm.xkb_binding_list.items) |xkb_binding| {
+        xkb_binding.river_xkb_binding.destroy();
+    }
+    wm.xkb_binding_list.clearRetainingCapacity();
+
+    const keybindings = wm.config.keybindings orelse &config.default_keybindings;
+    for (keybindings) |keybinding| {
         const keysym = parseKey(keybinding.key) orelse {
-            std.debug.print("Failed to parse key\n", .{});
+            std.debug.print("Failed to parse key '{s}'\n", .{keybinding.key});
             continue;
         };
+
         const xkb_binding = try xkb_bindings.getXkbBinding(
             wm.river_seat.?,
             @intFromEnum(keysym),
@@ -35,6 +39,7 @@ pub fn setupKeybindings(
             allocator,
             .{ .river_xkb_binding = xkb_binding, .action = keybinding.action },
         );
+
         xkb_binding.setListener(*types.WindowManager, xkbBindingListener, wm);
         xkb_binding.enable();
     }
@@ -44,15 +49,6 @@ fn parseKey(key: [:0]const u8) ?xkbcommon.Keysym {
     const keysym = xkbcommon.Keysym.fromName(key, .case_insensitive);
     if (keysym != .NoSymbol) return keysym;
     return null;
-}
-
-test "validate default keybindings" {
-    for (types.default_keybindings) |keybinding| {
-        if (parseKey(keybinding.key) == null) {
-            std.debug.print("Keysym '{s}' is not valid\n", .{keybinding.key});
-        }
-        try std.testing.expect(parseKey(keybinding.key) != null);
-    }
 }
 
 fn xkbBindingListener(
@@ -126,10 +122,10 @@ fn keybindingPressed(
             if (window.is_maximized) proportion = 1.0;
 
             const non_exclusive = output.non_exclusive orelse output.rect;
-            const h_gap = wm.getConfig().horizontal_gap;
+            const h_gap = wm.config.horizontal_gap;
             const base_width: f32 = @floatFromInt(non_exclusive.width - h_gap);
             const width_with_gap: i32 = @trunc(base_width * (proportion + increment));
-            if (width_with_gap - h_gap < 2 * wm.getConfig().border.width) return;
+            if (width_with_gap - h_gap < 2 * wm.config.border.width) return;
 
             window.is_maximized = false;
             window.proportion = proportion + increment;
@@ -517,7 +513,7 @@ fn keybindingPressed(
         .spawn => |command| {
             const pid = std.posix.system.fork();
             if (pid < 0) {
-                return error.ForkFailed;
+                return;
             } else if (pid == 0) {
                 _ = try std.process.spawn(io, .{ .argv = command });
                 std.process.exit(0);
@@ -526,19 +522,10 @@ fn keybindingPressed(
             return;
         },
         .reload_config => {
-            const old_config = wm.config;
-            const new_config = config.load(allocator, io, environ_map) orelse return;
+            std.zon.parse.free(wm.allocator, wm.config);
+            wm.config = config.load(allocator, io, environ_map);
 
-            wm.config = new_config;
-
-            if (old_config) |cfg|
-                std.zon.parse.free(wm.allocator, cfg);
-
-            if (wm.getConfig().cursor) |cursor| {
-                wm.river_seat.?.setXcursorTheme(cursor.theme, cursor.size);
-            }
-            layout.update(wm.output_list, wm.getConfig());
-
+            layout.update(wm.output_list, wm.config);
             wm.status = .setup_bindings;
             return;
         },
@@ -549,7 +536,7 @@ fn keybindingPressed(
         },
     }
 
-    layout.update(wm.output_list, wm.getConfig());
+    layout.update(wm.output_list, wm.config);
     wm.status = .layout;
 }
 
@@ -739,4 +726,13 @@ fn getOutputRight(
         .output = output,
         .index = output_idx,
     };
+}
+
+test "validate default keybindings" {
+    for (config.default_keybindings) |keybinding| {
+        if (parseKey(keybinding.key) == null) {
+            std.debug.print("Keysym '{s}' is not valid\n", .{keybinding.key});
+        }
+        try std.testing.expect(parseKey(keybinding.key) != null);
+    }
 }

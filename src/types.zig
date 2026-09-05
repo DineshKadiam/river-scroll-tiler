@@ -1,13 +1,11 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-const Io = std.Io;
 
 const wayland = @import("wayland");
 const river = wayland.client.river;
 
 pub const WindowManager = struct {
-    allocator: Allocator,
-    io: Io,
+    allocator: std.mem.Allocator,
+    io: std.Io,
     environ_map: std.process.Environ.Map,
 
     registry: *wayland.client.wl.Registry,
@@ -27,19 +25,14 @@ pub const WindowManager = struct {
         action: PointerAction,
     }),
 
-    config: ?*Config,
+    config: Config,
     status: Status,
     focused_output_idx: ?usize,
     previous_workspace: ?struct { output_idx: usize, workspace_idx: usize },
     is_passthrough: bool = false,
 
-    pub fn getConfig(self: *WindowManager) Config {
-        return if (self.config) |cfg| cfg.* else .{};
-    }
-
     pub fn deinit(self: *WindowManager) void {
-        if (self.config) |cfg|
-            std.zon.parse.free(self.allocator, cfg);
+        std.zon.parse.free(self.allocator, self.config);
 
         self.xkb_binding_list.deinit(self.allocator);
         self.pointer_binding_list.deinit(self.allocator);
@@ -114,9 +107,9 @@ pub const Config = struct {
         .unfocused_color = .{ .r = 160, .g = 160, .b = 160, .a = 1.0 },
     },
     cursor: ?struct { theme: [:0]const u8, size: u32 } = null,
-    spawn_at_startup: []const []const []const u8 = &.{},
-    keybindings: []const Keybinding = &default_keybindings,
-    pointer_bindings: []const PointerBinding = &default_pointer_bindings,
+    spawn_at_startup: ?[]const []const []const u8 = null,
+    keybindings: ?[]const Keybinding = null,
+    pointer_bindings: ?[]const PointerBinding = null,
 };
 
 const Border = struct { width: u8, focused_color: Color, unfocused_color: Color };
@@ -146,7 +139,7 @@ const Color = struct {
     }
 };
 
-const Keybinding = struct {
+pub const Keybinding = struct {
     key: [:0]const u8,
     modifiers: river.SeatV1.Modifiers,
     action: KeybindingAction,
@@ -201,7 +194,7 @@ pub const KeybindingAction = union(enum) {
     exit: void,
 };
 
-const PointerBinding = struct {
+pub const PointerBinding = struct {
     button: Button,
     modifiers: river.SeatV1.Modifiers,
     action: PointerAction,
@@ -214,90 +207,3 @@ const Button = enum(u32) {
 };
 
 const PointerAction = enum { move_window, resize_window };
-
-pub const default_keybindings = [_]Keybinding{
-    .{ .key = "q", .modifiers = .{ .mod4 = true }, .action = .close_window },
-    .{ .key = "f", .modifiers = .{ .mod4 = true }, .action = .toggle_maximize },
-    .{ .key = "f", .modifiers = .{ .mod4 = true, .shift = true }, .action = .toggle_fullscreen },
-
-    .{ .key = "minus", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = -0.1 } },
-    .{ .key = "equal", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = 0.1 } },
-    .{ .key = "BackSpace", .modifiers = .{ .mod4 = true }, .action = .{ .set_window_width = 0.5 } },
-
-    .{ .key = "Left", .modifiers = .{ .mod4 = true }, .action = .focus_window_left },
-    .{ .key = "Right", .modifiers = .{ .mod4 = true }, .action = .focus_window_right },
-    .{ .key = "Left", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_left },
-    .{ .key = "Right", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_right },
-
-    .{ .key = "v", .modifiers = .{ .mod4 = true }, .action = .toggle_workspace_floating },
-
-    .{ .key = "Up", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_above },
-    .{ .key = "Down", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_below },
-    .{ .key = "grave", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_previous },
-
-    .{ .key = "1", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 1 } },
-    .{ .key = "2", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 2 } },
-    .{ .key = "3", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 3 } },
-    .{ .key = "4", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 4 } },
-    .{ .key = "5", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 5 } },
-    .{ .key = "6", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 6 } },
-    .{ .key = "7", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 7 } },
-    .{ .key = "8", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 8 } },
-    .{ .key = "9", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 9 } },
-    .{ .key = "0", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 10 } },
-
-    .{ .key = "Up", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_workspace_above },
-    .{ .key = "Down", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_workspace_below },
-
-    .{ .key = "1", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 1 } },
-    .{ .key = "2", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 2 } },
-    .{ .key = "3", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 3 } },
-    .{ .key = "4", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 4 } },
-    .{ .key = "5", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 5 } },
-    .{ .key = "6", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 6 } },
-    .{ .key = "7", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 7 } },
-    .{ .key = "8", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 8 } },
-    .{ .key = "9", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 9 } },
-    .{ .key = "0", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 10 } },
-
-    .{ .key = "h", .modifiers = .{ .mod4 = true }, .action = .focus_output_left },
-    .{ .key = "l", .modifiers = .{ .mod4 = true }, .action = .focus_output_right },
-    .{ .key = "k", .modifiers = .{ .mod4 = true }, .action = .focus_output_above },
-    .{ .key = "j", .modifiers = .{ .mod4 = true }, .action = .focus_output_below },
-
-    .{ .key = "h", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_left },
-    .{ .key = "l", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_right },
-    .{ .key = "k", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_above },
-    .{ .key = "j", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_below },
-
-    .{ .key = "Escape", .modifiers = .{ .mod4 = true }, .action = .exit },
-    .{ .key = "r", .modifiers = .{ .mod4 = true }, .action = .reload_config },
-
-    .{ .key = "t", .modifiers = .{ .mod4 = true }, .action = .{ .spawn = &[_][]const u8{"alacritty"} } },
-
-    .{
-        .key = "XF86AudioRaiseVolume",
-        .modifiers = .{},
-        .action = .{ .spawn = &[_][]const u8{ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.05+", "--limit", "1.0" } },
-    },
-    .{
-        .key = "XF86AudioLowerVolume",
-        .modifiers = .{},
-        .action = .{ .spawn = &[_][]const u8{ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.05-" } },
-    },
-    .{
-        .key = "XF86AudioMute",
-        .modifiers = .{},
-        .action = .{ .spawn = &[_][]const u8{ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" } },
-    },
-    .{
-        .key = "XF86AudioMicMute",
-        .modifiers = .{},
-        .action = .{ .spawn = &[_][]const u8{ "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle" } },
-    },
-};
-
-const default_pointer_bindings = [_]PointerBinding{
-    .{ .button = .left, .modifiers = .{ .mod4 = true }, .action = .move_window },
-    .{ .button = .right, .modifiers = .{ .mod4 = true }, .action = .resize_window },
-};

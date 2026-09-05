@@ -18,13 +18,13 @@ pub fn windowListener(
             if (window != river_window) continue;
 
             const output = &wm.output_list.items[output_idx];
-            add(wm.allocator, window, output, wm.getConfig()) catch |err| {
+            add(wm.allocator, window, output, wm.config) catch |err| {
                 std.debug.print("Failed to add window: {}\n", .{err});
                 return;
             };
             _ = layout.pending_windows.swapRemove(idx);
 
-            layout.update(wm.output_list, wm.getConfig());
+            layout.update(wm.output_list, wm.config);
             wm.status = .layout;
             wm.river_window_manager.?.manageDirty();
             return;
@@ -60,7 +60,7 @@ pub fn windowListener(
                     else => return,
                 }
 
-                layout.update(wm.output_list, wm.getConfig());
+                layout.update(wm.output_list, wm.config);
                 wm.status = .layout;
 
                 return;
