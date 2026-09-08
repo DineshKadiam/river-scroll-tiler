@@ -153,7 +153,6 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
     switch (wm.status) {
         .layout => {
             layout.apply(
-                allocator,
                 wm.output_list,
                 focused_output_idx,
                 wm.config,

@@ -14,18 +14,31 @@ const edges = river.WindowV1.Edges{
 
 pub var pending_windows = std.ArrayList(*river.WindowV1).empty;
 
-pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) void {
-    for (output_list.items) |output| {
+pub fn update(
+    allocator: std.mem.Allocator,
+    output_list: std.ArrayList(types.Output),
+    config: types.Config,
+) void {
+    for (output_list.items) |*output| {
         const non_exclusive = output.non_exclusive orelse output.rect;
+
+        if (config.dynamic_workspaces) {
+            handleDynamicWorkspaces(allocator, output);
+        }
 
         for (output.workspace_list.items, 0..) |workspace, workspace_idx| {
             const workspace_offset = @as(i32, @intCast(workspace_idx)) -
                 @as(i32, @intCast(output.focused_workspace_idx));
-
             const y_offset = workspace_offset * output.rect.height;
 
             if (workspace.is_floating) {
-                floatingLayout(workspace.window_list, output, config, y_offset);
+                floatingLayout(
+                    workspace.window_list,
+                    non_exclusive,
+                    output.rect,
+                    config,
+                    y_offset,
+                );
                 continue;
             }
 
@@ -42,7 +55,8 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
             focusedWindowLayout(
                 focused_window,
                 &placement_rect,
-                output,
+                non_exclusive,
+                output.rect,
                 config,
                 y_offset,
                 should_center,
@@ -54,7 +68,8 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
                 unfocusedWindowLayout(
                     window,
                     &placement_rect,
-                    output,
+                    non_exclusive,
+                    output.rect,
                     config,
                     y_offset,
                 );
@@ -72,7 +87,8 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
                 unfocusedWindowLayout(
                     window,
                     &placement_rect,
-                    output,
+                    non_exclusive,
+                    output.rect,
                     config,
                     y_offset,
                 );
@@ -89,15 +105,41 @@ pub fn update(output_list: std.ArrayList(types.Output), config: types.Config) vo
     }
 }
 
+fn handleDynamicWorkspaces(
+    allocator: std.mem.Allocator,
+    output: *types.Output,
+) void {
+    const focused_idx = output.focused_workspace_idx;
+
+    var workspace_idx = output.workspace_list.items.len;
+    while (workspace_idx > 0) {
+        workspace_idx -= 1;
+        const workspace = output.workspace_list.items[workspace_idx];
+
+        if (workspace.window_list.items.len > 0) continue;
+        if (workspace_idx == focused_idx) continue;
+
+        _ = output.workspace_list.orderedRemove(workspace_idx);
+
+        if (workspace_idx < focused_idx and focused_idx != 0) {
+            output.focused_workspace_idx -= 1;
+        }
+    }
+
+    output.workspace_list.append(allocator, .{}) catch |err| {
+        std.debug.print("Failed to append workspace: {}\n", .{err});
+    };
+}
+
 fn floatingLayout(
     window_list: std.ArrayList(types.Window),
-    output: types.Output,
+    non_exclusive: types.Rectangle,
+    output_rect: types.Rectangle,
     config: types.Config,
     y_offset: i32,
 ) void {
     for (window_list.items) |*window| {
         if (window.is_maximized) {
-            const non_exclusive = output.non_exclusive orelse output.rect;
             const h_gap = config.horizontal_gap;
             const v_gap = config.vertical_gap;
 
@@ -108,7 +150,7 @@ fn floatingLayout(
                 .y = non_exclusive.y + v_gap,
             };
         } else if (window.is_fullscreen) {
-            window.finish_rect = output.rect;
+            window.finish_rect = output_rect;
         } else {
             window.finish_rect = window.floating_rect;
         }
@@ -121,12 +163,12 @@ fn floatingLayout(
 fn focusedWindowLayout(
     window: *types.Window,
     placement_rect: *types.Rectangle,
-    output: types.Output,
+    non_exclusive: types.Rectangle,
+    output_rect: types.Rectangle,
     config: types.Config,
     y_offset: i32,
     should_center: bool,
 ) void {
-    const non_exclusive = output.non_exclusive orelse output.rect;
     const h_gap = config.horizontal_gap;
     const v_gap = config.vertical_gap;
 
@@ -159,7 +201,7 @@ fn focusedWindowLayout(
     }
 
     if (window.is_fullscreen) {
-        placement_rect.* = output.rect;
+        placement_rect.* = output_rect;
         placement_rect.y += y_offset;
     }
 
@@ -169,16 +211,16 @@ fn focusedWindowLayout(
 fn unfocusedWindowLayout(
     window: *types.Window,
     placement_rect: *types.Rectangle,
-    output: types.Output,
+    non_exclusive: types.Rectangle,
+    output_rect: types.Rectangle,
     config: types.Config,
     y_offset: i32,
 ) void {
     if (window.is_fullscreen) {
-        placement_rect.width = output.rect.width;
-        placement_rect.height = output.rect.height;
-        placement_rect.y = output.rect.y + y_offset;
+        placement_rect.width = output_rect.width;
+        placement_rect.height = output_rect.height;
+        placement_rect.y = output_rect.y + y_offset;
     } else {
-        const non_exclusive = output.non_exclusive orelse output.rect;
         const h_gap = config.horizontal_gap;
         const v_gap = config.vertical_gap;
 
@@ -229,7 +271,6 @@ fn snapToEdge(
 }
 
 pub fn apply(
-    allocator: std.mem.Allocator,
     output_list: std.ArrayList(types.Output),
     focused_output_idx: usize,
     config: types.Config,
@@ -244,11 +285,7 @@ pub fn apply(
         window.proposeDimensions(0, 0);
     }
 
-    var output_idx = output_list.items.len;
-    while (output_idx > 0) {
-        output_idx -= 1;
-
-        const output = &output_list.items[output_idx];
+    for (output_list.items, 0..) |output, output_idx| {
         if (output.river_output == null) continue;
 
         for (output.workspace_list.items, 0..) |workspace, workspace_idx| {
@@ -284,42 +321,6 @@ pub fn apply(
                 window.river_node.placeTop();
                 river_seat.focusWindow(window.river_window);
             }
-        }
-
-        // if dynamic workspaces are enabled then we go through and remove any workspaces
-        // currently with no windows.
-        if (config.dynamic_workspaces) {
-            // remove empty workspaces in reverse order
-            var i = output.workspace_list.items.len;
-            while (i > 0) {
-                i -= 1;
-
-                const workspace = output.workspace_list.items[i];
-                const window_count = workspace.window_list.items.len;
-                if (window_count > 0) continue;
-                if (output.focused_workspace_idx == i) continue;
-
-                // remove the empty workspace from the array
-                _ = output.workspace_list.orderedRemove(i);
-
-                // make sure to keep track which workspace is focused
-                if (i < output.focused_workspace_idx) {
-                    output.focused_workspace_idx = @max(0, output.focused_workspace_idx - 1);
-                }
-            }
-
-            // always leave one empty workspace at the end
-            const final_workspace = types.Workspace{
-                .window_list = .empty,
-                .focused_window_idx = null,
-                .is_floating = false,
-            };
-            output.workspace_list.append(allocator, final_workspace) catch |err| {
-                std.debug.print(
-                    "could not add empty workspace for dynamic workspaces: {}\n",
-                    .{err},
-                );
-            };
         }
 
         if (output_idx != focused_output_idx) continue;

@@ -525,7 +525,7 @@ fn keybindingPressed(
             std.zon.parse.free(wm.allocator, wm.config);
             wm.config = config.load(allocator, io, environ_map);
 
-            layout.update(wm.output_list, wm.config);
+            layout.update(wm.allocator, wm.output_list, wm.config);
             wm.status = .setup_bindings;
             return;
         },
@@ -536,7 +536,7 @@ fn keybindingPressed(
         },
     }
 
-    layout.update(wm.output_list, wm.config);
+    layout.update(wm.allocator, wm.output_list, wm.config);
     wm.status = .layout;
 }
 

@@ -9,19 +9,21 @@
     // Center the focused window (never, always, single)
     // Set it to single to center a window if it's the only window in the workspace
     .center_focused_window = .never,
-
-    // Disable client side decorations
-    .no_csd = true,
-    // Duration of animations, in milliseconds
-    .animation_duration = 200,
     // Enable dynamic workspaces
     .dynamic_workspaces = false,
+    // Number of workspaces (ignored if dynamic workspaces are enabled)
+    .workspace_count = 10,
 
     .border = .{
         .width = 3,
         .focused_color = .{ .r = 141, .g = 214, .b = 0, .a = 1.0 },
         .unfocused_color = .{ .r = 160, .g = 160, .b = 160, .a = 1.0 },
     },
+
+    // Disable client side decorations
+    .no_csd = true,
+    // Duration of animations, in milliseconds
+    .animation_duration = 200,
 
     // Theme and size of cursor (set it to null to use default cursor)
     // .cursor = .{ .theme = "Adwaita", .size = 24 },

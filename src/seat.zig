@@ -39,7 +39,7 @@ pub fn seatListener(
                         };
                     }
 
-                    layout.update(wm.output_list, wm.config);
+                    layout.update(wm.allocator, wm.output_list, wm.config);
                     wm.status = .layout;
 
                     return;

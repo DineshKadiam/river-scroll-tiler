@@ -18,22 +18,23 @@ pub fn windowListener(
             if (window != river_window) continue;
 
             const output = &wm.output_list.items[output_idx];
-            add(wm.allocator, window, output, wm.config) catch |err| {
+            addWindow(wm.allocator, window, output, wm.config) catch |err| {
                 std.debug.print("Failed to add window: {}\n", .{err});
                 return;
             };
             _ = layout.pending_windows.swapRemove(idx);
 
-            layout.update(wm.output_list, wm.config);
+            layout.update(wm.allocator, wm.output_list, wm.config);
             wm.status = .layout;
             wm.river_window_manager.?.manageDirty();
+
             return;
         }
     }
 
     for (wm.output_list.items) |*output| {
         for (output.workspace_list.items) |*workspace| {
-            const window_idx = workspace.focused_window_idx orelse continue;
+            const focused_idx = workspace.focused_window_idx orelse continue;
 
             for (workspace.window_list.items, 0..) |*window, idx| {
                 if (window.river_window != river_window) continue;
@@ -42,8 +43,8 @@ pub fn windowListener(
                     .closed => {
                         if (workspace.window_list.items.len == 1) {
                             workspace.focused_window_idx = null;
-                        } else if (idx <= window_idx and window_idx != 0) {
-                            workspace.focused_window_idx = window_idx - 1;
+                        } else if (idx <= focused_idx and focused_idx != 0) {
+                            workspace.focused_window_idx = focused_idx - 1;
                         }
 
                         _ = workspace.window_list.orderedRemove(idx);
@@ -60,7 +61,7 @@ pub fn windowListener(
                     else => return,
                 }
 
-                layout.update(wm.output_list, wm.config);
+                layout.update(wm.allocator, wm.output_list, wm.config);
                 wm.status = .layout;
 
                 return;
@@ -69,7 +70,7 @@ pub fn windowListener(
     }
 }
 
-fn add(
+fn addWindow(
     allocator: std.mem.Allocator,
     river_window: *river.WindowV1,
     output: *types.Output,

@@ -98,15 +98,19 @@ pub const Config = struct {
     horizontal_gap: i32 = 9,
     default_window_width: f32 = 0.5,
     center_focused_window: enum { never, always, single } = .never,
-    no_csd: bool = true,
     dynamic_workspaces: bool = false,
-    animation_duration: u32 = 200,
+    workspace_count: u32 = 10,
+
     border: Border = .{
         .width = 3,
         .focused_color = .{ .r = 141, .g = 214, .b = 0, .a = 1.0 },
         .unfocused_color = .{ .r = 160, .g = 160, .b = 160, .a = 1.0 },
     },
+
+    no_csd: bool = true,
+    animation_duration: u32 = 200,
     cursor: ?struct { theme: [:0]const u8, size: u32 } = null,
+
     spawn_at_startup: ?[]const []const []const u8 = null,
     keybindings: ?[]const Keybinding = null,
     pointer_bindings: ?[]const PointerBinding = null,
