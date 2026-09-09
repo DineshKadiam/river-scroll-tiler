@@ -92,6 +92,7 @@ fn keybindingPressed(
 ) !void {
     const output_idx = wm.focused_output_idx orelse return;
     const output = &wm.output_list.items[output_idx];
+
     const workspace_idx = output.focused_workspace_idx;
     const workspace = &output.workspace_list.items[workspace_idx];
 
@@ -112,6 +113,7 @@ fn keybindingPressed(
             const window = &workspace.window_list.items[window_idx];
             window.is_fullscreen = !window.is_fullscreen;
         },
+        .toggle_workspace_floating => workspace.is_floating = !workspace.is_floating,
         .adjust_window_width => |increment| {
             if (workspace.is_floating) return;
             const window_idx = workspace.focused_window_idx orelse return;
@@ -135,8 +137,33 @@ fn keybindingPressed(
             const window_idx = workspace.focused_window_idx orelse return;
             var window = &workspace.window_list.items[window_idx];
             if (window.is_fullscreen) return;
+
             window.is_maximized = false;
             window.proportion = proportion;
+        },
+        .exit => {
+            wm.status = .exit;
+            return;
+        },
+        .reload_config => {
+            std.zon.parse.free(wm.allocator, wm.config);
+            wm.config = config.load(allocator, io, environ_map);
+
+            layout.update(wm.allocator, wm.output_list, wm.config);
+            wm.status = .setup_bindings;
+            return;
+        },
+        .toggle_passthrough => wm.is_passthrough = !wm.is_passthrough,
+        .spawn => |command| {
+            const pid = std.posix.system.fork();
+            if (pid < 0) {
+                return;
+            } else if (pid == 0) {
+                _ = try std.process.spawn(io, .{ .argv = command });
+                std.process.exit(0);
+            }
+            _ = std.posix.system.waitpid(pid, null, 0);
+            return;
         },
         .focus_window_left => {
             if (workspace.is_floating) return;
@@ -144,18 +171,18 @@ fn keybindingPressed(
             if (window_idx == 0) return;
             workspace.focused_window_idx = window_idx - 1;
         },
+        .focus_window_right => {
+            if (workspace.is_floating) return;
+            const window_idx = workspace.focused_window_idx orelse return;
+            if (window_idx == workspace.window_list.items.len - 1) return;
+            workspace.focused_window_idx = window_idx + 1;
+        },
         .focus_window_or_output_left => {
             const window_idx = workspace.focused_window_idx orelse return;
             if (workspace.is_floating or window_idx == 0) {
                 continue :action_switch .focus_output_left;
             }
             continue :action_switch .focus_window_left;
-        },
-        .focus_window_right => {
-            if (workspace.is_floating) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            if (window_idx == workspace.window_list.items.len - 1) return;
-            workspace.focused_window_idx = window_idx + 1;
         },
         .focus_window_or_output_right => {
             const window_idx = workspace.focused_window_idx orelse return;
@@ -168,6 +195,7 @@ fn keybindingPressed(
             if (workspace.is_floating) return;
             const window_idx = workspace.focused_window_idx orelse return;
             if (window_idx == 0) return;
+
             std.mem.swap(
                 types.Window,
                 &workspace.window_list.items[window_idx],
@@ -179,6 +207,7 @@ fn keybindingPressed(
             if (workspace.is_floating) return;
             const window_idx = workspace.focused_window_idx orelse return;
             if (window_idx == workspace.window_list.items.len - 1) return;
+
             std.mem.swap(
                 types.Window,
                 &workspace.window_list.items[window_idx],
@@ -200,24 +229,21 @@ fn keybindingPressed(
             }
             continue :action_switch .move_window_right;
         },
-        .toggle_workspace_floating => workspace.is_floating = !workspace.is_floating,
         .focus_workspace_above => {
             if (workspace_idx == 0) return;
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                output_idx,
-                output.focused_workspace_idx - 1,
-            );
+            output.focused_workspace_idx -= 1;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .focus_workspace_below => {
             if (workspace_idx == output.workspace_list.items.len - 1) return;
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                output_idx,
-                output.focused_workspace_idx + 1,
-            );
+            output.focused_workspace_idx += 1;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .focus_workspace_or_output_above => {
             if (workspace_idx == 0) {
@@ -231,58 +257,56 @@ fn keybindingPressed(
             }
             continue :action_switch .focus_workspace_below;
         },
-        .focus_workspace_previous => {
-            const previous = wm.previous_workspace orelse return;
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                previous.output_idx,
-                previous.workspace_idx,
-            );
-        },
         .focus_workspace_number => |number| {
             if (number == 0 or number > output.workspace_list.items.len) return;
             if (workspace_idx == number - 1) return;
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                output_idx,
-                number - 1,
-            );
+
+            output.focused_workspace_idx = number - 1;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
+        },
+        .focus_workspace_previous => {
+            const previous = wm.previous_workspace orelse return;
+
+            const target_output = &wm.output_list.items[previous.output_idx];
+            target_output.focused_workspace_idx = previous.workspace_idx;
+
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .move_window_to_workspace_above => {
             if (workspace_idx == 0) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target_window_idx = try sendWindowToWorkspace(
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                output_idx,
-                workspace_idx - 1,
+                workspace,
+                &output.workspace_list.items[workspace_idx - 1],
             );
-            try focusWindowToWorkspace(
-                wm,
-                target_window_idx,
-                output_idx,
-                workspace_idx - 1,
-            );
+
+            output.focused_workspace_idx = workspace_idx - 1;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .move_window_to_workspace_below => {
             if (workspace_idx == output.workspace_list.items.len - 1) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target_window_idx = try sendWindowToWorkspace(
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                output_idx,
-                workspace_idx + 1,
+                workspace,
+                &output.workspace_list.items[workspace_idx + 1],
             );
-            try focusWindowToWorkspace(
-                wm,
-                target_window_idx,
-                output_idx,
-                workspace_idx + 1,
-            );
+
+            output.focused_workspace_idx = workspace_idx + 1;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .move_window_to_workspace_or_output_above => {
             if (workspace_idx == 0) {
@@ -300,41 +324,35 @@ fn keybindingPressed(
             if (number == 0 or
                 number > output.workspace_list.items.len or
                 number - 1 == workspace_idx) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target_window_idx = try sendWindowToWorkspace(
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                output_idx,
-                number - 1,
+                workspace,
+                &output.workspace_list.items[number - 1],
             );
-            try focusWindowToWorkspace(
-                wm,
-                target_window_idx,
-                output_idx,
-                number - 1,
-            );
+
+            output.focused_workspace_idx = number - 1;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .send_window_to_workspace_above => {
             if (workspace_idx == 0) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            _ = try sendWindowToWorkspace(
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                output_idx,
-                workspace_idx - 1,
+                workspace,
+                &output.workspace_list.items[workspace_idx - 1],
             );
         },
         .send_window_to_workspace_below => {
             if (workspace_idx == output.workspace_list.items.len - 1) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            _ = try sendWindowToWorkspace(
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                output_idx,
-                workspace_idx + 1,
+                workspace,
+                &output.workspace_list.items[workspace_idx + 1],
             );
         },
         .send_window_to_workspace_or_output_above => {
@@ -353,186 +371,216 @@ fn keybindingPressed(
             if (number == 0 or
                 number > output.workspace_list.items.len or
                 number - 1 == workspace_idx) return;
-            const window_idx = workspace.focused_window_idx orelse return;
-            _ = try sendWindowToWorkspace(
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                output_idx,
-                number - 1,
+                workspace,
+                &output.workspace_list.items[number - 1],
             );
         },
         .focus_output_left => {
-            const target = getOutputLeft(wm);
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                target.index,
-                null,
-            );
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .left,
+            ) orelse return;
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .focus_output_right => {
-            const target = getOutputRight(wm);
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                target.index,
-                null,
-            );
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .right,
+            ) orelse return;
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .focus_output_above => {
-            const target = getOutputAbove(wm);
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                target.index,
-                null,
-            );
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .above,
+            ) orelse return;
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .focus_output_below => {
-            const target = getOutputBelow(wm);
-            try focusWindowToWorkspace(
-                wm,
-                null,
-                target.index,
-                null,
-            );
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .below,
+            ) orelse return;
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .move_window_to_output_left => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputLeft(wm);
-            const target_window_idx = try sendWindowToWorkspace(
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .left,
+            ) orelse return;
+
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
             );
-            try focusWindowToWorkspace(
-                wm,
-                target_window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
-            );
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .move_window_to_output_right => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputRight(wm);
-            const target_window_idx = try sendWindowToWorkspace(
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .right,
+            ) orelse return;
+
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
             );
-            try focusWindowToWorkspace(
-                wm,
-                target_window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
-            );
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .move_window_to_output_above => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputAbove(wm);
-            const target_window_idx = try sendWindowToWorkspace(
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .above,
+            ) orelse return;
+
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
             );
-            try focusWindowToWorkspace(
-                wm,
-                target_window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
-            );
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .move_window_to_output_below => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputBelow(wm);
-            const target_window_idx = try sendWindowToWorkspace(
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .below,
+            ) orelse return;
+
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
             );
-            try focusWindowToWorkspace(
-                wm,
-                target_window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
-            );
+
+            wm.focused_output_idx = target_output_idx;
+            wm.previous_workspace = .{
+                .output_idx = output_idx,
+                .workspace_idx = workspace_idx,
+            };
         },
         .send_window_to_output_left => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputLeft(wm);
-            _ = try sendWindowToWorkspace(
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .left,
+            ) orelse return;
+
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
             );
         },
         .send_window_to_output_right => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputRight(wm);
-            _ = try sendWindowToWorkspace(
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .right,
+            ) orelse return;
+
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
             );
         },
         .send_window_to_output_above => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputAbove(wm);
-            _ = try sendWindowToWorkspace(
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .above,
+            ) orelse return;
+
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
                 allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
             );
         },
         .send_window_to_output_below => {
-            const window_idx = workspace.focused_window_idx orelse return;
-            const target = getOutputBelow(wm);
-            _ = try sendWindowToWorkspace(
-                allocator,
-                wm,
-                window_idx,
-                target.index,
-                target.output.focused_workspace_idx,
-            );
-        },
-        .spawn => |command| {
-            const pid = std.posix.system.fork();
-            if (pid < 0) {
-                return;
-            } else if (pid == 0) {
-                _ = try std.process.spawn(io, .{ .argv = command });
-                std.process.exit(0);
-            }
-            _ = std.posix.system.waitpid(pid, null, 0);
-            return;
-        },
-        .reload_config => {
-            std.zon.parse.free(wm.allocator, wm.config);
-            wm.config = config.load(allocator, io, environ_map);
+            const target_output_idx = getOutputInDirection(
+                wm.output_list,
+                output.rect,
+                .below,
+            ) orelse return;
 
-            layout.update(wm.allocator, wm.output_list, wm.config);
-            wm.status = .setup_bindings;
-            return;
-        },
-        .toggle_passthrough => wm.is_passthrough = !wm.is_passthrough,
-        .exit => {
-            wm.status = .exit;
-            return;
+            const target_output = wm.output_list.items[target_output_idx];
+            const target_workspace_idx = target_output.focused_workspace_idx;
+
+            try sendFocusedWindowToWorkspace(
+                allocator,
+                workspace,
+                &target_output.workspace_list.items[target_workspace_idx],
+            );
         },
     }
 
@@ -540,192 +588,50 @@ fn keybindingPressed(
     wm.status = .layout;
 }
 
-// Move a window to a target workspace.
-fn moveWindowToWorkspace(
+fn sendFocusedWindowToWorkspace(
     allocator: std.mem.Allocator,
-    window_idx: usize,
-    workspace: *types.Workspace,
-    target_workspace: *types.Workspace,
-) !usize {
-    const window = workspace.window_list.orderedRemove(window_idx);
+    current: *types.Workspace,
+    target: *types.Workspace,
+) !void {
+    const window_idx = current.focused_window_idx orelse return error.NoFocusedWindow;
+    const window = current.window_list.orderedRemove(window_idx);
 
-    if (workspace.window_list.items.len == 0) {
-        workspace.focused_window_idx = null;
+    if (current.window_list.items.len == 0) {
+        current.focused_window_idx = null;
     } else if (window_idx != 0) {
-        workspace.focused_window_idx = window_idx - 1;
+        current.focused_window_idx = window_idx - 1;
     }
 
     var target_window_idx: usize = 0;
-    if (target_workspace.focused_window_idx) |idx| target_window_idx = idx + 1;
-
-    try target_workspace.window_list.insert(allocator, target_window_idx, window);
-    target_workspace.focused_window_idx = target_window_idx;
-    return target_window_idx;
-}
-
-// Sends a window to a workspace found on an output.
-fn sendWindowToWorkspace(
-    allocator: std.mem.Allocator,
-    wm: *types.WindowManager,
-    window_idx: usize,
-    target_output_idx: usize,
-    target_workspace_idx: usize,
-) !usize {
-    const output_idx = wm.focused_output_idx orelse return 0;
-    const output = &wm.output_list.items[output_idx];
-    const workspace_idx = output.focused_workspace_idx;
-    const workspace = &output.workspace_list.items[workspace_idx];
-
-    // ensure the target output is available
-    if (target_output_idx >= wm.output_list.items.len) return 0;
-    const target_output = &wm.output_list.items[target_output_idx];
-
-    // ensure the target workspace is available
-    if (target_workspace_idx >= target_output.workspace_list.items.len) return 0;
-    const target_workspace = &target_output.workspace_list.items[target_workspace_idx];
-
-    // move the window to the target workspace
-    const target_window_idx = try moveWindowToWorkspace(
-        allocator,
-        window_idx,
-        workspace,
-        target_workspace,
-    );
-    return target_window_idx;
-}
-
-// Sets the focus of an output, workspace, and optionally the window.
-fn focusWindowToWorkspace(
-    wm: *types.WindowManager,
-    target_window_idx: ?usize,
-    target_output_idx: usize,
-    target_workspace_idx: ?usize,
-) !void {
-    const output_idx = wm.focused_output_idx orelse return;
-    const output = &wm.output_list.items[output_idx];
-    const workspace_idx = output.focused_workspace_idx;
-
-    // ensure the target output is available
-    if (target_output_idx >= wm.output_list.items.len) return;
-    const target_output = &wm.output_list.items[target_output_idx];
-
-    // ensure the target workspace is available
-    const next_workspace_idx: usize = target_workspace_idx orelse target_output.focused_workspace_idx;
-    if (next_workspace_idx >= target_output.workspace_list.items.len) return;
-    const target_workspace = &target_output.workspace_list.items[next_workspace_idx];
-
-    var next_window_idx: ?usize = target_window_idx orelse target_workspace.focused_window_idx;
-    if (next_window_idx) |idx| {
-        if (idx >= target_workspace.window_list.items.len) {
-            // if the window index is out of bounds then select the last one
-            next_window_idx = target_workspace.window_list.items.len - 1;
-        }
+    if (target.focused_window_idx) |idx| {
+        target_window_idx = idx + 1;
     }
 
-    // set the focus
-    wm.focused_output_idx = target_output_idx;
-    target_output.focused_workspace_idx = next_workspace_idx;
-    target_workspace.focused_window_idx = next_window_idx;
-
-    // set the previous
-    wm.previous_workspace = .{
-        .output_idx = output_idx,
-        .workspace_idx = workspace_idx,
-    };
+    try target.window_list.insert(allocator, target_window_idx, window);
+    target.focused_window_idx = target_window_idx;
 }
 
-// TargetOutput represents the next output to target.
-const TargetOutput = struct {
-    output: *types.Output,
-    index: usize,
-};
+const Direction = enum { left, right, above, below };
 
-// Get the output above the currently focused output.
-fn getOutputAbove(
-    wm: *types.WindowManager,
-) TargetOutput {
-    const output_idx = wm.focused_output_idx orelse 0;
-    const output = &wm.output_list.items[output_idx];
+fn getOutputInDirection(
+    output_list: std.ArrayList(types.Output),
+    current_rect: types.Rectangle,
+    direction: Direction,
+) ?usize {
+    for (output_list.items, 0..) |output, output_idx| {
+        const target_rect = output.rect;
 
-    for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = target_output.rect.y + target_output.rect.height;
-        if (edge != output.rect.y) continue;
-        return .{
-            .output = target_output,
-            .index = target_output_idx,
+        const is_adjacent = switch (direction) {
+            .left => target_rect.x + target_rect.width == current_rect.x,
+            .right => current_rect.x + current_rect.width == target_rect.x,
+            .above => target_rect.y + target_rect.height == current_rect.y,
+            .below => current_rect.y + current_rect.height == target_rect.y,
         };
+
+        if (is_adjacent) return output_idx;
     }
 
-    return .{
-        .output = output,
-        .index = output_idx,
-    };
-}
-
-// Get the output below the currently focused output.
-fn getOutputBelow(
-    wm: *types.WindowManager,
-) TargetOutput {
-    const output_idx = wm.focused_output_idx orelse 0;
-    const output = &wm.output_list.items[output_idx];
-
-    for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = output.rect.y + target_output.rect.height;
-        if (edge != target_output.rect.y) continue;
-        return .{
-            .output = target_output,
-            .index = target_output_idx,
-        };
-    }
-
-    return .{
-        .output = output,
-        .index = output_idx,
-    };
-}
-
-// Get the output left of the currently focused output.
-fn getOutputLeft(
-    wm: *types.WindowManager,
-) TargetOutput {
-    const output_idx = wm.focused_output_idx orelse 0;
-    const output = &wm.output_list.items[output_idx];
-
-    for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = target_output.rect.x + target_output.rect.width;
-        if (edge != output.rect.x) continue;
-        return .{
-            .output = target_output,
-            .index = target_output_idx,
-        };
-    }
-
-    return .{
-        .output = output,
-        .index = output_idx,
-    };
-}
-
-// Get the output right of the currently focused output.
-fn getOutputRight(
-    wm: *types.WindowManager,
-) TargetOutput {
-    const output_idx = wm.focused_output_idx orelse 0;
-    const output = &wm.output_list.items[output_idx];
-
-    for (wm.output_list.items, 0..) |*target_output, target_output_idx| {
-        const edge = output.rect.x + target_output.rect.width;
-        if (edge != target_output.rect.x) continue;
-        return .{
-            .output = target_output,
-            .index = target_output_idx,
-        };
-    }
-
-    return .{
-        .output = output,
-        .index = output_idx,
-    };
+    return null;
 }
 
 test "validate default keybindings" {
