@@ -11,8 +11,15 @@ A minimalist scrolling window manager for [river](https://isaacfreund.com/softwa
 
 <video src="https://pub-da8894d425e3482384b5adec2dcc2361.r2.dev/recording.mp4" controls> </video>
 
-## Installation
-You can download pre-built binary from [releases](https://codeberg.org/lzj15/rill/releases).
+## Build
+### Dependencies
+* zig 0.16
+* wayland
+* wayland-protocols
+* xkbcommon
+```sh
+zig build --release=safe
+```
 
 ## Configuration
 Rill searches for a config file at the following locations in order:  
@@ -30,49 +37,40 @@ Run `rill` in [river's init file](https://codeberg.org/river/river#usage), or di
 | `Super` `q` | Close window |
 | `Super` `f` | Toggle maximize |
 | `Super` `Shift` `f` | Toggle fullscreen |
+| `Super` `v` | Toggle workspace floating |
 | `Super` `minus` | Decrease window's width by a proportion of 0.1 |
 | `Super` `equal` | Increase window's width by a proportion of 0.1 |
-| `Super` `BackSpace` | Set window's width to a proportion of 0.5 |
-| `Super` `Left` | Focus on window left |
-| `Super` `Right` | Focus on window right |
-| `Super` `Shift` `Left` | Move window to the left |
-| `Super` `Shift` `Right` | Move window to the right |
-| `Super` `v` | Toggle workspace floating |
-| `Super` `Up` | Focus on workspace above |
-| `Super` `Down` | Focus on workspace below |
-| `Super` `grave` | Focus on previous workspace |
-| `Super` `1~0` | Focus on workspace 1~10 |
+| `Super` `Escape` | Exit river |
+| `Super` `r` | Reload config |
+| `Super` `t` | Spawn Alacritty |
+| `Super` `Left` | Focus window left |
+| `Super` `Right` | Focus window right |
+| `Super` `Shift` `Left` | Move window left |
+| `Super` `Shift` `Right` | Move window right |
+| `Super` `Up` | Focus workspace above |
+| `Super` `Down` | Focus workspace below |
+| `Super` `1~0` | Focus workspace 1~10 |
 | `Super` `Shift` `Up` | Move window to workspace above |
 | `Super` `Shift` `Down` | Move window to workspace below |
 | `Super` `Shift` `1~0` | Move window to workspace 1~10 |
-| `Super` `h` | Focus on output left |
-| `Super` `l` | Focus on output right |
-| `Super` `k` | Focus on output above |
-| `Super` `j` | Focus on output below |
+| `Super` `Ctrl` `Up` | Send window to workspace above |
+| `Super` `Ctrl` `Down` | Send window to workspace below |
+| `Super` `Ctrl` `1~0` | Send window to workspace 1~10 |
+| `Super` `h` | Focus output left |
+| `Super` `l` | Focus output right |
+| `Super` `k` | Focus output above |
+| `Super` `j` | Focus output below |
 | `Super` `Shift` `h` | Move window to output left |
 | `Super` `Shift` `l` | Move window to output right |
 | `Super` `Shift` `k` | Move window to output above |
 | `Super` `Shift` `j` | Move window to output below |
-| `Super` `Escape` | Exit river |
-| `Super` `r` | Reload config |
-| `Super` `t` | Open alacritty |
-| `XF86AudioRaiseVolume` | Raise volume of PipeWire default audio sink by 5% |
-| `XF86AudioLowerVolume` | Lower volume of PipeWire default audio sink by 5% |
-| `XF86AudioMute` | Toggle mute for PipeWire default audio sink |
-| `XF86AudioMicMute` | Toggle mute for PipeWire default audio source |
+| `Super` `Ctrl` `h` | Send window to output left |
+| `Super` `Ctrl` `l` | Send window to output right |
+| `Super` `Ctrl` `k` | Send window to output above |
+| `Super` `Ctrl` `j` | Send window to output below |
 
 ### Default Pointer Bindings
 | Pointer Binding | Action |
 |----------|--------|
 | `Super` `Left Click` | Move floating window |
 | `Super` `Right Click` | Resize floating window |
-
-## Build
-### Dependencies
-* zig 0.16
-* wayland
-* wayland-protocols
-* xkbcommon
-```sh
-zig build --release=safe
-```

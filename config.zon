@@ -30,8 +30,7 @@
     .cursor = null,
 
     .spawn_at_startup = .{
-        // .{"awww-daemon"},
-        // .{ "wl-clip-persist", "--clipboard", "both" },
+        // .{ "command", "to", "run" },
     },
 
     .keybindings = .{
@@ -46,25 +45,77 @@
         .{ .key = "q", .modifiers = .{ .mod4 = true }, .action = .close_window },
         .{ .key = "f", .modifiers = .{ .mod4 = true }, .action = .toggle_maximize },
         .{ .key = "f", .modifiers = .{ .mod4 = true, .shift = true }, .action = .toggle_fullscreen },
-        .{ .key = "F11", .modifiers = .{ .mod4 = true }, .action = .toggle_passthrough },
+
+        // Toggle floating mode for current workspace
+        .{ .key = "v", .modifiers = .{ .mod4 = true }, .action = .toggle_workspace_floating },
 
         // Decrease focused window's width by 0.1 of the output's available width
         .{ .key = "minus", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = -0.1 } },
+
         // Increase focused window's width by 0.1 of the output's available width
         .{ .key = "equal", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = 0.1 } },
+
         // Set focused window's width to 0.5 of the output's available width
-        .{ .key = "BackSpace", .modifiers = .{ .mod4 = true }, .action = .{ .set_window_width = 0.5 } },
+        // .{ .key = "BackSpace", .modifiers = .{ .mod4 = true }, .action = .{ .set_window_width = 0.5 } },
 
-        .{ .key = "Left", .modifiers = .{ .mod4 = true }, .action = .focus_window_left },
-        .{ .key = "Right", .modifiers = .{ .mod4 = true }, .action = .focus_window_right },
-        .{ .key = "Left", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_left },
-        .{ .key = "Right", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_right },
+        .{ .key = "Escape", .modifiers = .{ .mod4 = true }, .action = .exit },
+        .{ .key = "r", .modifiers = .{ .mod4 = true }, .action = .reload_config },
 
-        .{ .key = "v", .modifiers = .{ .mod4 = true }, .action = .toggle_workspace_floating },
+        // .{ .key = "F11", .modifiers = .{ .mod4 = true }, .action = .toggle_passthrough },
 
-        .{ .key = "Up", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_above },
-        .{ .key = "Down", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_below },
-        .{ .key = "grave", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_previous },
+        // "Super t" to spawn alacritty
+        .{ .key = "t", .modifiers = .{ .mod4 = true }, .action = .{ .spawn = .{"alacritty"} } },
+
+        // Keybinding without modifier keys:
+        // .{
+        //     .key = "XF86AudioRaiseVolume",
+        //     .modifiers = .{},
+        //     .action = .{
+        //         .spawn = .{ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.05+", "--limit", "1.0" },
+        //     },
+        // },
+
+        .{
+            .key = "Left",
+            .modifiers = .{ .mod4 = true },
+            .action = .focus_window_left,
+
+            // Alternatively, use focus_window_or_output_left to focus the left window,
+            // or focus the left output when no window is present on the left
+            // .action = .focus_window_or_output_left,
+        },
+        .{
+            .key = "Right",
+            .modifiers = .{ .mod4 = true },
+            .action = .focus_window_right,
+            // .action = .focus_window_or_output_right,
+        },
+
+        .{
+            .key = "Left",
+            .modifiers = .{ .mod4 = true, .shift = true },
+            .action = .move_window_left,
+            // .action = .move_window_left_or_to_output_left,
+        },
+        .{
+            .key = "Right",
+            .modifiers = .{ .mod4 = true, .shift = true },
+            .action = .move_window_right,
+            // .action = .move_window_right_or_to_output_right,
+        },
+
+        .{
+            .key = "Up",
+            .modifiers = .{ .mod4 = true },
+            .action = .focus_workspace_above,
+            // .action = .focus_workspace_or_output_above,
+        },
+        .{
+            .key = "Down",
+            .modifiers = .{ .mod4 = true },
+            .action = .focus_workspace_below,
+            // .action = .focus_workspace_or_output_below,
+        },
 
         .{ .key = "1", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 1 } },
         .{ .key = "2", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 2 } },
@@ -77,8 +128,22 @@
         .{ .key = "9", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 9 } },
         .{ .key = "0", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 10 } },
 
-        .{ .key = "Up", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_workspace_above },
-        .{ .key = "Down", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_workspace_below },
+        // .{ .key = "grave", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_previous },
+
+        .{
+            .key = "Up",
+            .modifiers = .{ .mod4 = true, .shift = true },
+            .action = .move_window_to_workspace_above,
+            // .action = .move_window_to_workspace_or_output_above,
+
+        },
+        .{
+            .key = "Down",
+            .modifiers = .{ .mod4 = true, .shift = true },
+            .action = .move_window_to_workspace_below,
+            // .action = .move_window_to_workspace_or_output_below,
+
+        },
 
         .{ .key = "1", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 1 } },
         .{ .key = "2", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 2 } },
@@ -91,6 +156,32 @@
         .{ .key = "9", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 9 } },
         .{ .key = "0", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 10 } },
 
+        // Send window away without leaving current workspace
+        .{
+            .key = "Up",
+            .modifiers = .{ .mod4 = true, .ctrl = true },
+            .action = .send_window_to_workspace_above,
+            // .action = .send_window_to_workspace_or_output_above,
+
+        },
+        .{
+            .key = "Down",
+            .modifiers = .{ .mod4 = true, .ctrl = true },
+            .action = .send_window_to_workspace_below,
+            // .action = .send_window_to_workspace_or_output_below,
+        },
+
+        .{ .key = "1", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 1 } },
+        .{ .key = "2", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 2 } },
+        .{ .key = "3", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 3 } },
+        .{ .key = "4", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 4 } },
+        .{ .key = "5", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 5 } },
+        .{ .key = "6", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 6 } },
+        .{ .key = "7", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 7 } },
+        .{ .key = "8", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 8 } },
+        .{ .key = "9", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 9 } },
+        .{ .key = "0", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 10 } },
+
         .{ .key = "h", .modifiers = .{ .mod4 = true }, .action = .focus_output_left },
         .{ .key = "l", .modifiers = .{ .mod4 = true }, .action = .focus_output_right },
         .{ .key = "k", .modifiers = .{ .mod4 = true }, .action = .focus_output_above },
@@ -101,35 +192,15 @@
         .{ .key = "k", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_above },
         .{ .key = "j", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_below },
 
-        .{ .key = "Escape", .modifiers = .{ .mod4 = true }, .action = .exit },
-        .{ .key = "r", .modifiers = .{ .mod4 = true }, .action = .reload_config },
-
-        .{ .key = "t", .modifiers = .{ .mod4 = true }, .action = .{ .spawn = .{"alacritty"} } },
-
-        .{
-            .key = "XF86AudioRaiseVolume",
-            .modifiers = .{},
-            .action = .{ .spawn = .{ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.05+", "--limit", "1.0" } },
-        },
-        .{
-            .key = "XF86AudioLowerVolume",
-            .modifiers = .{},
-            .action = .{ .spawn = .{ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "0.05-" } },
-        },
-        .{
-            .key = "XF86AudioMute",
-            .modifiers = .{},
-            .action = .{ .spawn = .{ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" } },
-        },
-        .{
-            .key = "XF86AudioMicMute",
-            .modifiers = .{},
-            .action = .{ .spawn = .{ "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle" } },
-        },
+        .{ .key = "h", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_left },
+        .{ .key = "l", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_right },
+        .{ .key = "k", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_above },
+        .{ .key = "j", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_below },
     },
 
     .pointer_bindings = .{
         // Button: left, right, middle
+        // Works only for floating windows
         .{ .button = .left, .modifiers = .{ .mod4 = true }, .action = .move_window },
         .{ .button = .right, .modifiers = .{ .mod4 = true }, .action = .resize_window },
     },

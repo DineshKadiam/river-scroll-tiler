@@ -153,49 +153,58 @@ pub const KeybindingAction = union(enum) {
     close_window: void,
     toggle_maximize: void,
     toggle_fullscreen: void,
+    toggle_workspace_floating: void,
     adjust_window_width: f32,
     set_window_width: f32,
+
+    exit: void,
+    reload_config: void,
+    toggle_passthrough: void,
+    spawn: []const []const u8,
+
     focus_window_left: void,
-    focus_window_or_output_left: void,
     focus_window_right: void,
+    focus_window_or_output_left: void,
     focus_window_or_output_right: void,
+
     move_window_left: void,
     move_window_right: void,
     move_window_left_or_to_output_left: void,
     move_window_right_or_to_output_right: void,
-    toggle_workspace_floating: void,
+
     focus_workspace_above: void,
     focus_workspace_below: void,
     focus_workspace_or_output_above: void,
     focus_workspace_or_output_below: void,
-    focus_workspace_previous: void,
     focus_workspace_number: usize,
+    focus_workspace_previous: void,
+
     move_window_to_workspace_above: void,
     move_window_to_workspace_below: void,
     move_window_to_workspace_or_output_above: void,
     move_window_to_workspace_or_output_below: void,
     move_window_to_workspace_number: usize,
+
     send_window_to_workspace_above: void,
     send_window_to_workspace_below: void,
     send_window_to_workspace_or_output_above: void,
     send_window_to_workspace_or_output_below: void,
     send_window_to_workspace_number: usize,
+
     focus_output_left: void,
     focus_output_right: void,
     focus_output_above: void,
     focus_output_below: void,
+
     move_window_to_output_left: void,
     move_window_to_output_right: void,
     move_window_to_output_above: void,
     move_window_to_output_below: void,
+
     send_window_to_output_left: void,
     send_window_to_output_right: void,
     send_window_to_output_above: void,
     send_window_to_output_below: void,
-    spawn: []const []const u8,
-    reload_config: void,
-    toggle_passthrough: void,
-    exit: void,
 };
 
 pub const PointerBinding = struct {
