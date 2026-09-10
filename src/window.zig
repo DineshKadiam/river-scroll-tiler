@@ -14,10 +14,11 @@ pub fn windowListener(
     const output_idx = wm.focused_output_idx orelse return;
 
     if (event == .dimensions) {
+        const output = wm.output_list.items[output_idx];
+
         for (layout.pending_windows.items, 0..) |window, idx| {
             if (window != river_window) continue;
 
-            const output = &wm.output_list.items[output_idx];
             addWindow(wm.allocator, window, output, wm.config) catch |err| {
                 std.debug.print("Failed to add window: {}\n", .{err});
                 return;
@@ -25,14 +26,14 @@ pub fn windowListener(
             _ = layout.pending_windows.swapRemove(idx);
 
             layout.update(wm.allocator, wm.output_list, wm.config);
-            wm.status = .layout;
+            wm.task = .layout;
             wm.river_window_manager.?.manageDirty();
 
             return;
         }
     }
 
-    for (wm.output_list.items) |*output| {
+    for (wm.output_list.items) |output| {
         for (output.workspace_list.items) |*workspace| {
             const focused_idx = workspace.focused_window_idx orelse continue;
 
@@ -51,18 +52,18 @@ pub fn windowListener(
                         river_window.destroy();
                     },
                     .fullscreen_requested => {
-                        if (wm.status != .none) return;
+                        if (wm.task != .none) return;
                         window.is_fullscreen = true;
                     },
                     .exit_fullscreen_requested => {
-                        if (wm.status != .none) return;
+                        if (wm.task != .none) return;
                         window.is_fullscreen = false;
                     },
                     else => return,
                 }
 
                 layout.update(wm.allocator, wm.output_list, wm.config);
-                wm.status = .layout;
+                wm.task = .layout;
 
                 return;
             }
@@ -73,7 +74,7 @@ pub fn windowListener(
 fn addWindow(
     allocator: std.mem.Allocator,
     river_window: *river.WindowV1,
-    output: *types.Output,
+    output: types.Output,
     config: types.Config,
 ) !void {
     const non_exclusive = output.non_exclusive orelse output.rect;
@@ -105,7 +106,9 @@ fn addWindow(
 
     const workspace = &output.workspace_list.items[output.focused_workspace_idx];
     var window_idx: usize = 0;
-    if (workspace.focused_window_idx) |idx| window_idx = idx + 1;
+    if (workspace.focused_window_idx) |idx| {
+        window_idx = idx + 1;
+    }
 
     try workspace.window_list.insert(allocator, window_idx, window);
     workspace.focused_window_idx = window_idx;

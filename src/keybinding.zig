@@ -12,7 +12,11 @@ pub fn setupKeybindings(
     allocator: std.mem.Allocator,
     wm: *types.WindowManager,
 ) !void {
-    const xkb_bindings = wm.river_xkb_bindings orelse {
+    const river_seat = wm.river_seat orelse {
+        std.debug.print("Failed to find seat\n", .{});
+        return;
+    };
+    const river_xkb_bindings = wm.river_xkb_bindings orelse {
         std.debug.print("Failed to find xkb bindings\n", .{});
         return;
     };
@@ -29,19 +33,19 @@ pub fn setupKeybindings(
             continue;
         };
 
-        const xkb_binding = try xkb_bindings.getXkbBinding(
-            wm.river_seat.?,
+        const river_xkb_binding = try river_xkb_bindings.getXkbBinding(
+            river_seat,
             @intFromEnum(keysym),
             keybinding.modifiers,
         );
 
         try wm.xkb_binding_list.append(
             allocator,
-            .{ .river_xkb_binding = xkb_binding, .action = keybinding.action },
+            .{ .river_xkb_binding = river_xkb_binding, .action = keybinding.action },
         );
 
-        xkb_binding.setListener(*types.WindowManager, xkbBindingListener, wm);
-        xkb_binding.enable();
+        river_xkb_binding.setListener(*types.WindowManager, xkbBindingListener, wm);
+        river_xkb_binding.enable();
     }
 }
 
@@ -56,7 +60,8 @@ fn xkbBindingListener(
     event: river.XkbBindingV1.Event,
     wm: *types.WindowManager,
 ) void {
-    if (wm.status == .pointer_action) return;
+    if (wm.task == .pointer_action) return;
+
     for (wm.xkb_binding_list.items) |binding| {
         if (binding.river_xkb_binding != xkb_binding) continue;
 
@@ -142,7 +147,7 @@ fn keybindingPressed(
             window.proportion = proportion;
         },
         .exit => {
-            wm.status = .exit;
+            wm.task = .exit;
             return;
         },
         .reload_config => {
@@ -150,7 +155,8 @@ fn keybindingPressed(
             wm.config = config.load(allocator, io, environ_map);
 
             layout.update(wm.allocator, wm.output_list, wm.config);
-            wm.status = .setup_bindings;
+            wm.task = .setup_seat;
+
             return;
         },
         .toggle_passthrough => wm.is_passthrough = !wm.is_passthrough,
@@ -585,7 +591,7 @@ fn keybindingPressed(
     }
 
     layout.update(wm.allocator, wm.output_list, wm.config);
-    wm.status = .layout;
+    wm.task = .layout;
 }
 
 fn sendFocusedWindowToWorkspace(

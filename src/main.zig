@@ -37,12 +37,12 @@ pub fn main(init: std.process.Init) !void {
         .river_layer_shell = null,
         .river_seat = null,
         .output_list = .empty,
-        .focused_output_idx = null,
-        .previous_workspace = null,
-        .config = config.load(init.gpa, init.io, init.environ_map.*),
         .xkb_binding_list = .empty,
         .pointer_binding_list = .empty,
-        .status = .none,
+        .config = config.load(init.gpa, init.io, init.environ_map.*),
+        .task = .none,
+        .focused_output_idx = null,
+        .previous_workspace = null,
     };
     defer wm.deinit();
 
@@ -69,7 +69,7 @@ pub fn main(init: std.process.Init) !void {
             std.debug.print("Window manager stopped with status: {}\n", .{status});
             break;
         }
-        if (wm.status == .animation) window_manager.manageDirty();
+        if (wm.task == .animation) window_manager.manageDirty();
     }
 }
 
@@ -109,7 +109,7 @@ fn windowManagerListener(
         .seat => |seat_event| {
             seat_event.id.setListener(*types.WindowManager, seat.seatListener, wm);
             wm.river_seat = seat_event.id;
-            wm.status = .setup_bindings;
+            wm.task = .setup_seat;
 
             const layer_shell = wm.river_layer_shell orelse {
                 std.debug.print("Failed to find layer shell\n", .{});
@@ -127,7 +127,7 @@ fn windowManagerListener(
                 return;
             };
             window_event.id.setListener(*types.WindowManager, window.windowListener, wm);
-            wm.status = .layout;
+            wm.task = .layout;
         },
         .manage_start => {
             manage(wm.allocator, wm.io, wm);
@@ -150,7 +150,7 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
         return;
     };
 
-    switch (wm.status) {
+    switch (wm.task) {
         .layout => {
             layout.apply(
                 wm.output_list,
@@ -158,12 +158,12 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
                 wm.config,
                 river_seat,
             );
-            wm.status = .{
+            wm.task = .{
                 .animation = std.Io.Clock.awake.now(io).toMilliseconds(),
             };
         },
         .animation => |start_time| {
-            wm.status = animation.apply(
+            wm.task = animation.apply(
                 wm.output_list,
                 focused_output_idx,
                 wm.config,
@@ -179,7 +179,7 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
                 wm.config.border.width,
             );
         },
-        .setup_bindings => {
+        .setup_seat => {
             keybinding.setupKeybindings(allocator, wm) catch |err| {
                 std.debug.print("Failed to setup keybindings: {}\n", .{err});
             };
@@ -191,7 +191,7 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
                 river_seat.setXcursorTheme(cursor.theme, cursor.size);
             }
 
-            wm.status = .layout;
+            wm.task = .layout;
             river_window_manager.manageDirty();
         },
         .exit => {

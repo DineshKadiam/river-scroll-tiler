@@ -26,7 +26,7 @@ pub const WindowManager = struct {
     }),
 
     config: Config,
-    status: Status,
+    task: Task,
     focused_output_idx: ?usize,
     previous_workspace: ?struct { output_idx: usize, workspace_idx: usize },
     is_passthrough: bool = false,
@@ -84,11 +84,11 @@ pub const Rectangle = struct {
     y: i32,
 };
 
-pub const Status = union(enum) {
+pub const Task = union(enum) {
     layout: void,
     animation: i64,
     pointer_action: PointerAction,
-    setup_bindings: void,
+    setup_seat: void,
     exit: void,
     none: void,
 };

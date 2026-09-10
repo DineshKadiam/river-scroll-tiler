@@ -8,7 +8,7 @@ pub fn apply(
     config: types.Config,
     start_time: i64,
     now: i64,
-) types.Status {
+) types.Task {
     const duration = config.animation_duration;
     const is_last_frame = now - start_time >= duration;
 

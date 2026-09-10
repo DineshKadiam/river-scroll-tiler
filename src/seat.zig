@@ -40,7 +40,7 @@ pub fn seatListener(
                     }
 
                     layout.update(wm.allocator, wm.output_list, wm.config);
-                    wm.status = .layout;
+                    wm.task = .layout;
 
                     return;
                 }
@@ -54,7 +54,7 @@ pub fn seatListener(
             const output_top = output.rect.y;
             const output_bottom = output.rect.y + output.rect.height;
 
-            switch (wm.status.pointer_action) {
+            switch (wm.task.pointer_action) {
                 .move_window => {
                     window.floating_rect.x = std.math.clamp(
                         start.x + delta.dx,
@@ -83,9 +83,20 @@ pub fn seatListener(
             window.current_rect = window.floating_rect;
         },
         .op_release => {
-            wm.status = .none;
+            wm.task = .none;
             window.start_rect = null;
         },
+        else => {},
+    }
+}
+
+pub fn layerShellSeatListener(
+    _: *river.LayerShellSeatV1,
+    event: river.LayerShellSeatV1.Event,
+    wm: *types.WindowManager,
+) void {
+    switch (event) {
+        .focus_none => wm.task = .layout,
         else => {},
     }
 }
@@ -94,6 +105,11 @@ pub fn setupPointerBindings(
     allocator: std.mem.Allocator,
     wm: *types.WindowManager,
 ) !void {
+    const river_seat = wm.river_seat orelse {
+        std.debug.print("Failed to find seat\n", .{});
+        return;
+    };
+
     for (wm.pointer_binding_list.items) |pointer_binding| {
         pointer_binding.river_pointer_binding.destroy();
     }
@@ -103,18 +119,18 @@ pub fn setupPointerBindings(
         wm.config.pointer_bindings orelse &config.default_pointer_bindings;
 
     for (pointer_bindings) |binding| {
-        const pointer_binding = try wm.river_seat.?.getPointerBinding(
+        const river_pointer_binding = try river_seat.getPointerBinding(
             @intFromEnum(binding.button),
             binding.modifiers,
         );
 
         try wm.pointer_binding_list.append(
             allocator,
-            .{ .river_pointer_binding = pointer_binding, .action = binding.action },
+            .{ .river_pointer_binding = river_pointer_binding, .action = binding.action },
         );
 
-        pointer_binding.setListener(*types.WindowManager, pointerBindingListener, wm);
-        pointer_binding.enable();
+        river_pointer_binding.setListener(*types.WindowManager, pointerBindingListener, wm);
+        river_pointer_binding.enable();
     }
 }
 
@@ -132,6 +148,7 @@ fn pointerBindingListener(
             .pressed => {
                 const output_idx = wm.focused_output_idx orelse return;
                 const output = &wm.output_list.items[output_idx];
+
                 const workspace = output.workspace_list.items[output.focused_workspace_idx];
                 if (!workspace.is_floating) return;
 
@@ -140,22 +157,11 @@ fn pointerBindingListener(
                 if (window.is_fullscreen) return;
 
                 window.start_rect = window.current_rect;
-                wm.status = .{ .pointer_action = binding.action };
+                wm.task = .{ .pointer_action = binding.action };
             },
             else => {},
         }
         return;
-    }
-}
-
-pub fn layerShellSeatListener(
-    _: *river.LayerShellSeatV1,
-    event: river.LayerShellSeatV1.Event,
-    wm: *types.WindowManager,
-) void {
-    switch (event) {
-        .focus_none => wm.status = .layout,
-        else => {},
     }
 }
 
@@ -166,6 +172,7 @@ pub fn pointerAction(
 ) void {
     const output = output_list.items[focused_output_idx];
     const workspace = output.workspace_list.items[output.focused_workspace_idx];
+
     const window_idx = workspace.focused_window_idx orelse return;
     const window = workspace.window_list.items[window_idx];
 

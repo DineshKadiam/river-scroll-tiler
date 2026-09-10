@@ -11,6 +11,8 @@ pub fn add(
     river_output: *river.OutputV1,
     wm: *types.WindowManager,
 ) !void {
+    river_output.setListener(*types.WindowManager, outputListener, wm);
+
     for (wm.output_list.items, 0..) |*output, idx| {
         if (output.river_output != null) continue;
 
@@ -18,7 +20,6 @@ pub fn add(
         output.river_layer_shell_output = getLayerShellOutput(river_output, wm);
 
         wm.focused_output_idx = idx;
-        river_output.setListener(*types.WindowManager, outputListener, wm);
         return;
     }
 
@@ -38,10 +39,9 @@ pub fn add(
         .rect = undefined,
         .non_exclusive = null,
     };
-    try wm.output_list.append(allocator, output);
 
+    try wm.output_list.append(allocator, output);
     wm.focused_output_idx = wm.output_list.items.len - 1;
-    river_output.setListener(*types.WindowManager, outputListener, wm);
 }
 
 fn getLayerShellOutput(
@@ -98,7 +98,7 @@ fn outputListener(
                     wm.previous_workspace.?.output_idx -= 1;
                 }
 
-                wm.status = .layout;
+                wm.task = .layout;
             },
             else => {},
         }
@@ -124,7 +124,7 @@ fn layerShellOutputListener(
                 };
 
                 layout.update(wm.allocator, wm.output_list, wm.config);
-                wm.status = .layout;
+                wm.task = .layout;
             },
         }
         return;
