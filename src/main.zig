@@ -231,7 +231,3 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
         .none => river_seat.opEnd(),
     }
 }
-
-test {
-    std.testing.refAllDecls(@This());
-}

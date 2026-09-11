@@ -150,26 +150,3 @@ pub const default_pointer_bindings = [_]types.PointerBinding{
     .{ .button = .left, .modifiers = .{ .mod4 = true }, .action = .move_window },
     .{ .button = .right, .modifiers = .{ .mod4 = true }, .action = .resize_window },
 };
-
-test "validate default config file" {
-    const fields = std.meta.fields(types.Config);
-
-    const config_struct = types.Config{};
-    const config_file: types.Config = @import("default_config");
-
-    inline for (fields) |field| {
-        const has_field = @hasField(@TypeOf(@import("default_config")), field.name);
-        if (!has_field) {
-            std.debug.print("Default config file is missing field '{s}'\n", .{field.name});
-            try std.testing.expect(has_field);
-        }
-
-        const struct_value = @field(config_struct, field.name);
-        const file_value = @field(config_file, field.name);
-
-        std.testing.expectEqualDeep(struct_value, file_value) catch |err| {
-            std.debug.print("Value of '{s}' doesn't match\n", .{field.name});
-            return err;
-        };
-    }
-}

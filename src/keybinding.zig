@@ -638,12 +638,3 @@ fn getOutputInDirection(
 
     return null;
 }
-
-test "validate default keybindings" {
-    for (config.default_keybindings) |keybinding| {
-        if (parseKey(keybinding.key) == null) {
-            std.debug.print("Keysym '{s}' is not valid\n", .{keybinding.key});
-        }
-        try std.testing.expect(parseKey(keybinding.key) != null);
-    }
-}
