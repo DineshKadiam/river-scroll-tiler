@@ -5,14 +5,12 @@ const river = wayland.client.river;
 
 const types = @import("types.zig");
 
-const edges = river.WindowV1.Edges{
+pub const edges = river.WindowV1.Edges{
     .top = true,
     .bottom = true,
     .left = true,
     .right = true,
 };
-
-pub var pending_windows = std.ArrayList(*river.WindowV1).empty;
 
 pub fn update(
     allocator: std.mem.Allocator,
@@ -139,6 +137,8 @@ fn floatingLayout(
     y_offset: i32,
 ) void {
     for (window_list.items) |*window| {
+        window.start_rect = window.current_rect;
+
         if (window.is_maximized) {
             const h_gap = config.horizontal_gap;
             const v_gap = config.vertical_gap;
@@ -155,7 +155,6 @@ fn floatingLayout(
             window.finish_rect = window.floating_rect;
         }
 
-        window.start_rect = window.current_rect;
         window.finish_rect.?.y += y_offset;
     }
 }
@@ -277,13 +276,6 @@ pub fn apply(
     river_seat: *river.SeatV1,
 ) void {
     river_seat.clearFocus();
-
-    for (pending_windows.items) |window| {
-        if (config.no_csd) window.useSsd();
-        window.setTiled(edges);
-        window.hide();
-        window.proposeDimensions(0, 0);
-    }
 
     for (output_list.items, 0..) |output, output_idx| {
         if (output.river_output == null) continue;

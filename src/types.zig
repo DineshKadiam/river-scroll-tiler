@@ -89,6 +89,7 @@ pub const Task = union(enum) {
     animation: i64,
     pointer_action: PointerAction,
     setup_seat: void,
+    prepare_window: void,
     exit: void,
     none: void,
 };

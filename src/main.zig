@@ -108,6 +108,7 @@ fn windowManagerListener(
         },
         .seat => |seat_event| {
             seat_event.id.setListener(*types.WindowManager, seat.seatListener, wm);
+
             wm.river_seat = seat_event.id;
             wm.task = .setup_seat;
 
@@ -122,12 +123,13 @@ fn windowManagerListener(
             layer_shell_seat.setListener(*types.WindowManager, seat.layerShellSeatListener, wm);
         },
         .window => |window_event| {
-            layout.pending_windows.append(wm.allocator, window_event.id) catch |err| {
+            window.pending_windows.append(wm.allocator, window_event.id) catch |err| {
                 std.debug.print("Failed to add window: {}\n", .{err});
                 return;
             };
+
             window_event.id.setListener(*types.WindowManager, window.windowListener, wm);
-            wm.task = .layout;
+            wm.task = .prepare_window;
         },
         .manage_start => {
             manage(wm.allocator, wm.io, wm);
@@ -193,6 +195,14 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
 
             wm.task = .layout;
             river_window_manager.manageDirty();
+        },
+        .prepare_window => {
+            for (window.pending_windows.items) |pending_window| {
+                if (wm.config.no_csd) pending_window.useSsd();
+                pending_window.setTiled(layout.edges);
+                pending_window.hide();
+                pending_window.proposeDimensions(0, 0);
+            }
         },
         .exit => {
             river_window_manager.exitSession();

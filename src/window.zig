@@ -6,6 +6,8 @@ const river = wayland.client.river;
 const layout = @import("layout.zig");
 const types = @import("types.zig");
 
+pub var pending_windows = std.ArrayList(*river.WindowV1).empty;
+
 pub fn windowListener(
     river_window: *river.WindowV1,
     event: river.WindowV1.Event,
@@ -16,14 +18,14 @@ pub fn windowListener(
     if (event == .dimensions) {
         const output = wm.output_list.items[output_idx];
 
-        for (layout.pending_windows.items, 0..) |window, idx| {
+        for (pending_windows.items, 0..) |window, idx| {
             if (window != river_window) continue;
 
             addWindow(wm.allocator, window, output, wm.config) catch |err| {
                 std.debug.print("Failed to add window: {}\n", .{err});
                 return;
             };
-            _ = layout.pending_windows.swapRemove(idx);
+            _ = pending_windows.swapRemove(idx);
 
             layout.update(wm.allocator, wm.output_list, wm.config);
             wm.task = .layout;
