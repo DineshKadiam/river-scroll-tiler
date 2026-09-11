@@ -67,16 +67,11 @@ fn xkbBindingListener(
 
         switch (event) {
             .pressed => {
-                const action = binding.action;
-                // if we are in passthrough mode and we are not trying to toggle it then
-                // go ahead and forego checking the action.
-                if (wm.is_passthrough and action != .toggle_passthrough) continue;
-
                 keybindingPressed(
                     wm.allocator,
                     wm.io,
                     wm.environ_map,
-                    action,
+                    binding.action,
                     wm,
                 ) catch |err| {
                     std.debug.print("Keybinding's action failed: {}\n", .{err});
@@ -159,7 +154,11 @@ fn keybindingPressed(
 
             return;
         },
-        .toggle_passthrough => wm.is_passthrough = !wm.is_passthrough,
+        .toggle_passthrough => {
+            wm.is_passthrough = !wm.is_passthrough;
+            wm.task = .toggle_passthrough;
+            return;
+        },
         .spawn => |command| {
             const pid = std.posix.system.fork();
             if (pid < 0) {

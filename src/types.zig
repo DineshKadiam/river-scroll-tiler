@@ -29,7 +29,7 @@ pub const WindowManager = struct {
     task: Task,
     focused_output_idx: ?usize,
     previous_workspace: ?struct { output_idx: usize, workspace_idx: usize },
-    is_passthrough: bool = false,
+    is_passthrough: bool,
 
     pub fn deinit(self: *WindowManager) void {
         std.zon.parse.free(self.allocator, self.config);
@@ -90,6 +90,7 @@ pub const Task = union(enum) {
     pointer_action: PointerAction,
     setup_seat: void,
     prepare_window: void,
+    toggle_passthrough: void,
     exit: void,
     none: void,
 };

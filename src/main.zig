@@ -43,6 +43,7 @@ pub fn main(init: std.process.Init) !void {
         .task = .none,
         .focused_output_idx = null,
         .previous_workspace = null,
+        .is_passthrough = false,
     };
     defer wm.deinit();
 
@@ -203,6 +204,25 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
                 pending_window.hide();
                 pending_window.proposeDimensions(0, 0);
             }
+        },
+        .toggle_passthrough => {
+            if (wm.is_passthrough) {
+                for (wm.xkb_binding_list.items) |xkb_binding| {
+                    if (xkb_binding.action == .toggle_passthrough) continue;
+                    xkb_binding.river_xkb_binding.disable();
+                }
+                for (wm.pointer_binding_list.items) |pointer_binding| {
+                    pointer_binding.river_pointer_binding.disable();
+                }
+            } else {
+                for (wm.xkb_binding_list.items) |xkb_binding| {
+                    xkb_binding.river_xkb_binding.enable();
+                }
+                for (wm.pointer_binding_list.items) |pointer_binding| {
+                    pointer_binding.river_pointer_binding.enable();
+                }
+            }
+            wm.task = .none;
         },
         .exit => {
             river_window_manager.exitSession();
