@@ -76,6 +76,10 @@ fn outputListener(
                 river_output.destroy();
                 output.river_output = null;
 
+                if (output.river_layer_shell_output) |river_layer_shell_output| {
+                    river_layer_shell_output.destroy();
+                }
+
                 const focused_idx = wm.focused_output_idx orelse return;
                 if (wm.output_list.items.len == 1) {
                     wm.focused_output_idx = null;

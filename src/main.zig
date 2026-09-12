@@ -27,15 +27,18 @@ pub fn main(init: std.process.Init) !void {
     const display = try wayland.client.wl.Display.connect(null);
     defer display.disconnect();
 
+    const registry = try display.getRegistry();
+    defer registry.destroy();
+
     var wm = types.WindowManager{
         .allocator = init.gpa,
         .io = init.io,
         .environ_map = init.environ_map,
-        .registry = try display.getRegistry(),
         .river_window_manager = null,
         .river_xkb_bindings = null,
         .river_layer_shell = null,
         .river_seat = null,
+        .river_layer_shell_seat = null,
         .output_list = .empty,
         .xkb_binding_list = .empty,
         .pointer_binding_list = .empty,
@@ -47,7 +50,7 @@ pub fn main(init: std.process.Init) !void {
     };
     defer wm.deinit();
 
-    wm.registry.setListener(*types.WindowManager, registryListener, &wm);
+    registry.setListener(*types.WindowManager, registryListener, &wm);
     _ = display.roundtrip();
 
     const window_manager = wm.river_window_manager orelse return;
@@ -137,6 +140,7 @@ fn handleWindowManagerEvent(
                 seat.layerShellSeatListener,
                 wm,
             );
+            wm.river_layer_shell_seat = river_layer_shell_seat;
         },
         .window => |window_event| {
             try window.pending_windows.append(wm.allocator, window_event.id);

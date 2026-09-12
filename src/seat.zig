@@ -8,13 +8,14 @@ const layout = @import("layout.zig");
 const types = @import("types.zig");
 
 pub fn seatListener(
-    _: *river.SeatV1,
+    river_seat: *river.SeatV1,
     event: river.SeatV1.Event,
     wm: *types.WindowManager,
 ) void {
     const output_idx = wm.focused_output_idx orelse return;
     const output = &wm.output_list.items[output_idx];
     const workspace = output.workspace_list.items[output.focused_workspace_idx];
+
     const window_idx = workspace.focused_window_idx orelse return;
     const window = &workspace.window_list.items[window_idx];
 
@@ -83,6 +84,11 @@ pub fn seatListener(
         .op_release => {
             wm.task = .none;
             window.start_rect = null;
+        },
+        .removed => {
+            river_seat.destroy();
+            const river_layer_shell_seat = wm.river_layer_shell_seat orelse return;
+            river_layer_shell_seat.destroy();
         },
         else => {},
     }

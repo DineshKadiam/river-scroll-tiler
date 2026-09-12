@@ -8,12 +8,12 @@ pub const WindowManager = struct {
     io: std.Io,
     environ_map: *std.process.Environ.Map,
 
-    registry: *wayland.client.wl.Registry,
-
     river_window_manager: ?*river.WindowManagerV1,
     river_xkb_bindings: ?*river.XkbBindingsV1,
     river_layer_shell: ?*river.LayerShellV1,
+
     river_seat: ?*river.SeatV1,
+    river_layer_shell_seat: ?*river.LayerShellSeatV1,
 
     output_list: std.ArrayList(Output),
     xkb_binding_list: std.ArrayList(struct {
@@ -44,8 +44,6 @@ pub const WindowManager = struct {
             output.workspace_list.deinit(self.allocator);
         }
         self.output_list.deinit(self.allocator);
-
-        self.registry.destroy();
     }
 };
 
