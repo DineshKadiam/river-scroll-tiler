@@ -39,9 +39,7 @@ pub fn seatListener(
                         };
                     }
 
-                    layout.update(wm.allocator, wm.output_list, wm.config);
                     wm.task = .layout;
-
                     return;
                 }
             }
@@ -105,10 +103,7 @@ pub fn setupPointerBindings(
     allocator: std.mem.Allocator,
     wm: *types.WindowManager,
 ) !void {
-    const river_seat = wm.river_seat orelse {
-        std.debug.print("Failed to find seat\n", .{});
-        return;
-    };
+    const river_seat = wm.river_seat orelse return;
 
     for (wm.pointer_binding_list.items) |pointer_binding| {
         pointer_binding.river_pointer_binding.destroy();
@@ -135,14 +130,14 @@ pub fn setupPointerBindings(
 }
 
 fn pointerBindingListener(
-    pointer_binding: *river.PointerBindingV1,
+    river_pointer_binding: *river.PointerBindingV1,
     event: river.PointerBindingV1.Event,
     wm: *types.WindowManager,
 ) void {
     if (wm.is_passthrough) return;
 
     for (wm.pointer_binding_list.items) |binding| {
-        if (binding.river_pointer_binding != pointer_binding) continue;
+        if (binding.river_pointer_binding != river_pointer_binding) continue;
 
         switch (event) {
             .pressed => {

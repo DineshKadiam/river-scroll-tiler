@@ -17,7 +17,7 @@ pub fn add(
         if (output.river_output != null) continue;
 
         output.river_output = river_output;
-        output.river_layer_shell_output = getLayerShellOutput(river_output, wm);
+        output.river_layer_shell_output = try getLayerShellOutput(river_output, wm);
 
         wm.focused_output_idx = idx;
         return;
@@ -33,7 +33,7 @@ pub fn add(
 
     const output = types.Output{
         .river_output = river_output,
-        .river_layer_shell_output = getLayerShellOutput(river_output, wm),
+        .river_layer_shell_output = try getLayerShellOutput(river_output, wm),
         .workspace_list = workspace_list,
         .focused_workspace_idx = 0,
         .rect = undefined,
@@ -47,15 +47,9 @@ pub fn add(
 fn getLayerShellOutput(
     river_output: *river.OutputV1,
     wm: *types.WindowManager,
-) ?*river.LayerShellOutputV1 {
-    const layer_shell = wm.river_layer_shell orelse {
-        std.debug.print("Failed to find layer shell\n", .{});
-        return null;
-    };
-    const layer_shell_output = layer_shell.getOutput(river_output) catch {
-        std.debug.print("Failed to get layer shell output\n", .{});
-        return null;
-    };
+) !?*river.LayerShellOutputV1 {
+    const layer_shell = wm.river_layer_shell orelse return null;
+    const layer_shell_output = try layer_shell.getOutput(river_output);
 
     layer_shell_output.setListener(*types.WindowManager, layerShellOutputListener, wm);
     return layer_shell_output;
@@ -107,12 +101,12 @@ fn outputListener(
 }
 
 fn layerShellOutputListener(
-    layer_shell_output: *river.LayerShellOutputV1,
+    river_layer_shell_output: *river.LayerShellOutputV1,
     event: river.LayerShellOutputV1.Event,
     wm: *types.WindowManager,
 ) void {
     for (wm.output_list.items) |*output| {
-        if (output.river_layer_shell_output != layer_shell_output) continue;
+        if (output.river_layer_shell_output != river_layer_shell_output) continue;
 
         switch (event) {
             .non_exclusive_area => |area| {
@@ -123,7 +117,6 @@ fn layerShellOutputListener(
                     .y = area.y,
                 };
 
-                layout.update(wm.allocator, wm.output_list, wm.config);
                 wm.task = .layout;
             },
         }

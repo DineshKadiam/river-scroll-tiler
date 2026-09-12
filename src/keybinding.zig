@@ -8,18 +8,14 @@ const config = @import("config.zig");
 const layout = @import("layout.zig");
 const types = @import("types.zig");
 
+const Direction = enum { left, right, above, below };
+
 pub fn setupKeybindings(
     allocator: std.mem.Allocator,
     wm: *types.WindowManager,
 ) !void {
-    const river_seat = wm.river_seat orelse {
-        std.debug.print("Failed to find seat\n", .{});
-        return;
-    };
-    const river_xkb_bindings = wm.river_xkb_bindings orelse {
-        std.debug.print("Failed to find xkb bindings\n", .{});
-        return;
-    };
+    const river_seat = wm.river_seat orelse return;
+    const river_xkb_bindings = wm.river_xkb_bindings orelse return;
 
     for (wm.xkb_binding_list.items) |xkb_binding| {
         xkb_binding.river_xkb_binding.destroy();
@@ -56,14 +52,14 @@ fn parseKey(key: [:0]const u8) ?xkbcommon.Keysym {
 }
 
 fn xkbBindingListener(
-    xkb_binding: *river.XkbBindingV1,
+    river_xkb_binding: *river.XkbBindingV1,
     event: river.XkbBindingV1.Event,
     wm: *types.WindowManager,
 ) void {
     if (wm.task == .pointer_action) return;
 
     for (wm.xkb_binding_list.items) |binding| {
-        if (binding.river_xkb_binding != xkb_binding) continue;
+        if (binding.river_xkb_binding != river_xkb_binding) continue;
 
         switch (event) {
             .pressed => {
@@ -74,7 +70,7 @@ fn xkbBindingListener(
                     binding.action,
                     wm,
                 ) catch |err| {
-                    std.debug.print("Keybinding's action failed: {}\n", .{err});
+                    std.debug.print("Failed to handle pressed keybinding: {}\n", .{err});
                 };
             },
             else => {},
@@ -86,7 +82,7 @@ fn xkbBindingListener(
 fn keybindingPressed(
     allocator: std.mem.Allocator,
     io: std.Io,
-    environ_map: std.process.Environ.Map,
+    environ_map: *std.process.Environ.Map,
     action: types.KeybindingAction,
     wm: *types.WindowManager,
 ) !void {
@@ -148,10 +144,7 @@ fn keybindingPressed(
         .reload_config => {
             std.zon.parse.free(wm.allocator, wm.config);
             wm.config = config.load(allocator, io, environ_map);
-
-            layout.update(wm.allocator, wm.output_list, wm.config);
             wm.task = .setup_seat;
-
             return;
         },
         .toggle_passthrough => {
@@ -161,12 +154,14 @@ fn keybindingPressed(
         },
         .spawn => |command| {
             const pid = std.posix.system.fork();
+
             if (pid < 0) {
                 return;
             } else if (pid == 0) {
                 _ = try std.process.spawn(io, .{ .argv = command });
                 std.process.exit(0);
             }
+
             _ = std.posix.system.waitpid(pid, null, 0);
             return;
         },
@@ -589,7 +584,6 @@ fn keybindingPressed(
         },
     }
 
-    layout.update(wm.allocator, wm.output_list, wm.config);
     wm.task = .layout;
 }
 
@@ -615,8 +609,6 @@ fn sendFocusedWindowToWorkspace(
     try target.window_list.insert(allocator, target_window_idx, window);
     target.focused_window_idx = target_window_idx;
 }
-
-const Direction = enum { left, right, above, below };
 
 fn getOutputInDirection(
     output_list: std.ArrayList(types.Output),

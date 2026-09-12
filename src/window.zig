@@ -13,9 +13,9 @@ pub fn windowListener(
     event: river.WindowV1.Event,
     wm: *types.WindowManager,
 ) void {
-    const output_idx = wm.focused_output_idx orelse return;
-
     if (event == .dimensions) {
+        const river_window_manager = wm.river_window_manager orelse return;
+        const output_idx = wm.focused_output_idx orelse return;
         const output = wm.output_list.items[output_idx];
 
         for (pending_windows.items, 0..) |window, idx| {
@@ -27,9 +27,8 @@ pub fn windowListener(
             };
             _ = pending_windows.swapRemove(idx);
 
-            layout.update(wm.allocator, wm.output_list, wm.config);
             wm.task = .layout;
-            wm.river_window_manager.?.manageDirty();
+            river_window_manager.manageDirty();
 
             return;
         }
@@ -44,14 +43,14 @@ pub fn windowListener(
 
                 switch (event) {
                     .closed => {
-                        if (workspace.window_list.items.len == 1) {
+                        _ = workspace.window_list.orderedRemove(idx);
+                        river_window.destroy();
+
+                        if (workspace.window_list.items.len == 0) {
                             workspace.focused_window_idx = null;
                         } else if (idx <= focused_idx and focused_idx != 0) {
                             workspace.focused_window_idx = focused_idx - 1;
                         }
-
-                        _ = workspace.window_list.orderedRemove(idx);
-                        river_window.destroy();
                     },
                     .fullscreen_requested => {
                         if (wm.task != .none) return;
@@ -64,9 +63,7 @@ pub fn windowListener(
                     else => return,
                 }
 
-                layout.update(wm.allocator, wm.output_list, wm.config);
                 wm.task = .layout;
-
                 return;
             }
         }

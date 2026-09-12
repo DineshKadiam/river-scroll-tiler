@@ -30,7 +30,7 @@ pub fn main(init: std.process.Init) !void {
     var wm = types.WindowManager{
         .allocator = init.gpa,
         .io = init.io,
-        .environ_map = init.environ_map.*,
+        .environ_map = init.environ_map,
         .registry = try display.getRegistry(),
         .river_window_manager = null,
         .river_xkb_bindings = null,
@@ -39,7 +39,7 @@ pub fn main(init: std.process.Init) !void {
         .output_list = .empty,
         .xkb_binding_list = .empty,
         .pointer_binding_list = .empty,
-        .config = config.load(init.gpa, init.io, init.environ_map.*),
+        .config = config.load(init.gpa, init.io, init.environ_map),
         .task = .none,
         .focused_output_idx = null,
         .previous_workspace = null,
@@ -50,10 +50,7 @@ pub fn main(init: std.process.Init) !void {
     wm.registry.setListener(*types.WindowManager, registryListener, &wm);
     _ = display.roundtrip();
 
-    const window_manager = wm.river_window_manager orelse {
-        std.debug.print("Failed to find window manager\n", .{});
-        return;
-    };
+    const window_manager = wm.river_window_manager orelse return;
     window_manager.setListener(*types.WindowManager, windowManagerListener, &wm);
 
     if (wm.config.spawn_at_startup) |commands| {
@@ -82,15 +79,25 @@ fn registryListener(
     switch (event) {
         .global => |global| {
             const interface_name = std.mem.span(global.interface);
+
             if (std.mem.eql(u8, interface_name, "river_window_manager_v1")) {
                 wm.river_window_manager =
-                    registry.bind(global.name, river.WindowManagerV1, 4) catch null;
+                    registry.bind(global.name, river.WindowManagerV1, 4) catch |err| {
+                        std.debug.print("Failed to find river window manager: {}\n", .{err});
+                        return;
+                    };
             } else if (std.mem.eql(u8, interface_name, "river_xkb_bindings_v1")) {
                 wm.river_xkb_bindings =
-                    registry.bind(global.name, river.XkbBindingsV1, 1) catch null;
+                    registry.bind(global.name, river.XkbBindingsV1, 1) catch |err| {
+                        std.debug.print("Failed to find river xkb bindings: {}\n", .{err});
+                        return;
+                    };
             } else if (std.mem.eql(u8, interface_name, "river_layer_shell_v1")) {
                 wm.river_layer_shell =
-                    registry.bind(global.name, river.LayerShellV1, 1) catch null;
+                    registry.bind(global.name, river.LayerShellV1, 1) catch |err| {
+                        std.debug.print("Failed to find river layer shell {}\n", .{err});
+                        return;
+                    };
             }
         },
         .global_remove => {},
@@ -98,14 +105,23 @@ fn registryListener(
 }
 
 fn windowManagerListener(
-    window_manager: *river.WindowManagerV1,
+    river_window_manager: *river.WindowManagerV1,
     event: river.WindowManagerV1.Event,
     wm: *types.WindowManager,
 ) void {
+    handleWindowManagerEvent(river_window_manager, event, wm) catch |err| {
+        std.debug.print("Failed to handle window manager event: {}\n", .{err});
+    };
+}
+
+fn handleWindowManagerEvent(
+    river_window_manager: *river.WindowManagerV1,
+    event: river.WindowManagerV1.Event,
+    wm: *types.WindowManager,
+) !void {
     switch (event) {
         .output => |output_event| {
-            output.add(wm.allocator, output_event.id, wm) catch |err|
-                std.debug.print("Failed to add output: {}\n", .{err});
+            try output.add(wm.allocator, output_event.id, wm);
         },
         .seat => |seat_event| {
             seat_event.id.setListener(*types.WindowManager, seat.seatListener, wm);
@@ -113,49 +129,40 @@ fn windowManagerListener(
             wm.river_seat = seat_event.id;
             wm.task = .setup_seat;
 
-            const layer_shell = wm.river_layer_shell orelse {
-                std.debug.print("Failed to find layer shell\n", .{});
-                return;
-            };
-            const layer_shell_seat = layer_shell.getSeat(seat_event.id) catch {
-                std.debug.print("Failed to get layer shell seat\n", .{});
-                return;
-            };
-            layer_shell_seat.setListener(*types.WindowManager, seat.layerShellSeatListener, wm);
+            const river_layer_shell = wm.river_layer_shell orelse return;
+            const river_layer_shell_seat = try river_layer_shell.getSeat(seat_event.id);
+
+            river_layer_shell_seat.setListener(
+                *types.WindowManager,
+                seat.layerShellSeatListener,
+                wm,
+            );
         },
         .window => |window_event| {
-            window.pending_windows.append(wm.allocator, window_event.id) catch |err| {
-                std.debug.print("Failed to add window: {}\n", .{err});
-                return;
-            };
+            try window.pending_windows.append(wm.allocator, window_event.id);
 
             window_event.id.setListener(*types.WindowManager, window.windowListener, wm);
             wm.task = .prepare_window;
         },
         .manage_start => {
-            manage(wm.allocator, wm.io, wm);
-            window_manager.manageFinish();
+            try manage(wm.allocator, wm.io, wm);
+            river_window_manager.manageFinish();
         },
-        .render_start => window_manager.renderFinish(),
-        .finished => window_manager.destroy(),
+        .render_start => river_window_manager.renderFinish(),
+        .finished => river_window_manager.destroy(),
         else => {},
     }
 }
 
-fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) void {
+fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) !void {
     const focused_output_idx = wm.focused_output_idx orelse return;
-    const river_window_manager = wm.river_window_manager orelse {
-        std.debug.print("Failed to find window manager\n", .{});
-        return;
-    };
-    const river_seat = wm.river_seat orelse {
-        std.debug.print("Failed to find seat\n", .{});
-        return;
-    };
+    const river_window_manager = wm.river_window_manager orelse return;
+    const river_seat = wm.river_seat orelse return;
 
     switch (wm.task) {
         .layout => {
-            layout.apply(
+            try layout.apply(
+                wm.allocator,
                 wm.output_list,
                 focused_output_idx,
                 wm.config,
@@ -183,12 +190,8 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) vo
             );
         },
         .setup_seat => {
-            keybinding.setupKeybindings(allocator, wm) catch |err| {
-                std.debug.print("Failed to setup keybindings: {}\n", .{err});
-            };
-            seat.setupPointerBindings(allocator, wm) catch |err| {
-                std.debug.print("Failed to setup pointer bindings: {}\n", .{err});
-            };
+            try keybinding.setupKeybindings(allocator, wm);
+            try seat.setupPointerBindings(allocator, wm);
 
             if (wm.config.cursor) |cursor| {
                 river_seat.setXcursorTheme(cursor.theme, cursor.size);

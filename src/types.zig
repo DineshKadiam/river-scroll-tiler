@@ -6,7 +6,7 @@ const river = wayland.client.river;
 pub const WindowManager = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
-    environ_map: std.process.Environ.Map,
+    environ_map: *std.process.Environ.Map,
 
     registry: *wayland.client.wl.Registry,
 

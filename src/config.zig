@@ -7,7 +7,7 @@ const Location = enum { XDG_CONFIG_HOME, HOME };
 pub fn load(
     allocator: std.mem.Allocator,
     io: std.Io,
-    environ_map: std.process.Environ.Map,
+    environ_map: *std.process.Environ.Map,
 ) types.Config {
     if (loadConfigFrom(allocator, io, environ_map, .XDG_CONFIG_HOME)) |config| {
         return config;
@@ -27,7 +27,7 @@ pub fn load(
 fn loadConfigFrom(
     allocator: std.mem.Allocator,
     io: std.Io,
-    environ_map: std.process.Environ.Map,
+    environ_map: *std.process.Environ.Map,
     location: Location,
 ) !types.Config {
     const env = environ_map.get(@tagName(location)) orelse

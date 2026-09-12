@@ -12,21 +12,29 @@ pub const edges = river.WindowV1.Edges{
     .right = true,
 };
 
-pub fn update(
+pub fn apply(
     allocator: std.mem.Allocator,
     output_list: std.ArrayList(types.Output),
+    focused_output_idx: usize,
     config: types.Config,
-) void {
-    for (output_list.items) |*output| {
-        const non_exclusive = output.non_exclusive orelse output.rect;
+    river_seat: *river.SeatV1,
+) !void {
+    river_seat.clearFocus();
+
+    for (output_list.items, 0..) |*output, output_idx| {
+        if (output.river_output == null) continue;
 
         if (config.dynamic_workspaces) {
-            handleDynamicWorkspaces(allocator, output);
+            try handleDynamicWorkspaces(allocator, output);
         }
 
+        const non_exclusive = output.non_exclusive orelse output.rect;
+
         for (output.workspace_list.items, 0..) |workspace, workspace_idx| {
-            const workspace_offset = @as(i32, @intCast(workspace_idx)) -
+            const workspace_offset =
+                @as(i32, @intCast(workspace_idx)) -
                 @as(i32, @intCast(output.focused_workspace_idx));
+
             const y_offset = workspace_offset * output.rect.height;
 
             if (workspace.is_floating) {
@@ -37,68 +45,53 @@ pub fn update(
                     config,
                     y_offset,
                 );
-                continue;
-            }
-
-            const focused_window_idx = workspace.focused_window_idx orelse continue;
-            const focused_window = &workspace.window_list.items[focused_window_idx];
-
-            var placement_rect: types.Rectangle = undefined;
-            const should_center = switch (config.center_focused_window) {
-                .never => false,
-                .always => true,
-                .single => workspace.window_list.items.len == 1,
-            };
-
-            focusedWindowLayout(
-                focused_window,
-                &placement_rect,
-                non_exclusive,
-                output.rect,
-                config,
-                y_offset,
-                should_center,
-            );
-            focused_window.finish_rect = placement_rect;
-
-            placement_rect.x += placement_rect.width + config.horizontal_gap;
-            for (workspace.window_list.items[focused_window_idx + 1 ..]) |*window| {
-                unfocusedWindowLayout(
-                    window,
-                    &placement_rect,
+            } else {
+                scrollingLayout(
+                    workspace,
                     non_exclusive,
                     output.rect,
                     config,
                     y_offset,
                 );
-                window.finish_rect = placement_rect;
-                placement_rect.x += placement_rect.width + config.horizontal_gap;
             }
 
-            placement_rect.x = focused_window.finish_rect.?.x;
-            var window_idx = focused_window_idx;
+            for (workspace.window_list.items, 0..) |window, window_idx| {
+                window.river_window.exitFullscreen();
 
-            while (window_idx > 0) {
-                window_idx -= 1;
-                const window = &workspace.window_list.items[window_idx];
-
-                unfocusedWindowLayout(
-                    window,
-                    &placement_rect,
-                    non_exclusive,
-                    output.rect,
-                    config,
-                    y_offset,
+                const unfocused_color = config.border.unfocused_color.toRiverColor();
+                window.river_window.setBorders(
+                    edges,
+                    config.border.width,
+                    unfocused_color.r,
+                    unfocused_color.g,
+                    unfocused_color.b,
+                    unfocused_color.a,
                 );
-                placement_rect.x -= config.horizontal_gap + placement_rect.width;
-                window.finish_rect = placement_rect;
-            }
 
-            if (!should_center) snapToEdge(
-                workspace.window_list,
-                non_exclusive,
-                config.horizontal_gap,
-            );
+                if (window.should_close) window.river_window.close();
+
+                if (output_idx != focused_output_idx) continue;
+                if (workspace_idx != output.focused_workspace_idx) continue;
+                if (window_idx != workspace.focused_window_idx) continue;
+
+                const focused_color = config.border.focused_color.toRiverColor();
+                window.river_window.setBorders(
+                    edges,
+                    config.border.width,
+                    focused_color.r,
+                    focused_color.g,
+                    focused_color.b,
+                    focused_color.a,
+                );
+
+                window.river_node.placeTop();
+                river_seat.focusWindow(window.river_window);
+            }
+        }
+
+        if (output_idx != focused_output_idx) continue;
+        if (output.river_layer_shell_output) |layer_shell_output| {
+            layer_shell_output.setDefault();
         }
     }
 }
@@ -106,7 +99,7 @@ pub fn update(
 fn handleDynamicWorkspaces(
     allocator: std.mem.Allocator,
     output: *types.Output,
-) void {
+) !void {
     const focused_idx = output.focused_workspace_idx;
 
     var workspace_idx = output.workspace_list.items.len;
@@ -124,9 +117,7 @@ fn handleDynamicWorkspaces(
         }
     }
 
-    output.workspace_list.append(allocator, .{}) catch |err| {
-        std.debug.print("Failed to append workspace: {}\n", .{err});
-    };
+    try output.workspace_list.append(allocator, .{});
 }
 
 fn floatingLayout(
@@ -157,6 +148,78 @@ fn floatingLayout(
 
         window.finish_rect.?.y += y_offset;
     }
+}
+
+fn scrollingLayout(
+    workspace: types.Workspace,
+    non_exclusive: types.Rectangle,
+    output_rect: types.Rectangle,
+    config: types.Config,
+    y_offset: i32,
+) void {
+    const focused_window_idx = workspace.focused_window_idx orelse return;
+    const focused_window = &workspace.window_list.items[focused_window_idx];
+
+    var placement_rect: types.Rectangle = undefined;
+    const should_center = switch (config.center_focused_window) {
+        .never => false,
+        .always => true,
+        .single => workspace.window_list.items.len == 1,
+    };
+
+    focusedWindowLayout(
+        focused_window,
+        &placement_rect,
+        non_exclusive,
+        output_rect,
+        config,
+        y_offset,
+        should_center,
+    );
+
+    focused_window.finish_rect = placement_rect;
+    placement_rect.x += placement_rect.width + config.horizontal_gap;
+
+    for (workspace.window_list.items[focused_window_idx + 1 ..]) |*window| {
+        unfocusedWindowLayout(
+            window,
+            &placement_rect,
+            non_exclusive,
+            output_rect,
+            config,
+            y_offset,
+        );
+
+        window.finish_rect = placement_rect;
+        placement_rect.x += placement_rect.width + config.horizontal_gap;
+    }
+
+    const focused_window_rect = focused_window.finish_rect orelse return;
+    placement_rect.x = focused_window_rect.x;
+
+    var window_idx = focused_window_idx;
+    while (window_idx > 0) {
+        window_idx -= 1;
+        const window = &workspace.window_list.items[window_idx];
+
+        unfocusedWindowLayout(
+            window,
+            &placement_rect,
+            non_exclusive,
+            output_rect,
+            config,
+            y_offset,
+        );
+
+        placement_rect.x -= config.horizontal_gap + placement_rect.width;
+        window.finish_rect = placement_rect;
+    }
+
+    if (!should_center) snapToEdge(
+        workspace.window_list,
+        non_exclusive,
+        config.horizontal_gap,
+    );
 }
 
 fn focusedWindowLayout(
@@ -242,19 +305,21 @@ fn snapToEdge(
     non_exclusive: types.Rectangle,
     h_gap: i32,
 ) void {
-    var head_distance: ?i32 = null;
-    const head_x = window_list.items[0].finish_rect.?.x;
+    const head_rect = window_list.items[0].finish_rect orelse return;
+    const head_x = head_rect.x;
     const left_bound = non_exclusive.x + h_gap;
 
+    var head_distance: ?i32 = null;
     if (head_x > left_bound) {
         head_distance = head_x - left_bound;
     }
 
-    var tail_distance: ?i32 = null;
     const tail_window = window_list.items[window_list.items.len - 1];
-    const tail_x = tail_window.finish_rect.?.x + tail_window.finish_rect.?.width;
+    const tail_rect = tail_window.finish_rect orelse return;
+    const tail_x = tail_rect.x + tail_rect.width;
     const right_bound = non_exclusive.x + non_exclusive.width - h_gap;
 
+    var tail_distance: ?i32 = null;
     if (tail_x < right_bound) {
         tail_distance = @min(right_bound - tail_x, left_bound - head_x);
     }
@@ -265,59 +330,6 @@ fn snapToEdge(
             x.* -= distance;
         } else if (tail_distance) |distance| {
             x.* += distance;
-        }
-    }
-}
-
-pub fn apply(
-    output_list: std.ArrayList(types.Output),
-    focused_output_idx: usize,
-    config: types.Config,
-    river_seat: *river.SeatV1,
-) void {
-    river_seat.clearFocus();
-
-    for (output_list.items, 0..) |output, output_idx| {
-        if (output.river_output == null) continue;
-
-        for (output.workspace_list.items, 0..) |workspace, workspace_idx| {
-            for (workspace.window_list.items, 0..) |window, window_idx| {
-                window.river_window.exitFullscreen();
-
-                const unfocused_color = config.border.unfocused_color.toRiverColor();
-                window.river_window.setBorders(
-                    edges,
-                    config.border.width,
-                    unfocused_color.r,
-                    unfocused_color.g,
-                    unfocused_color.b,
-                    unfocused_color.a,
-                );
-
-                if (window.should_close) window.river_window.close();
-
-                if (output_idx != focused_output_idx) continue;
-                if (workspace_idx != output.focused_workspace_idx) continue;
-                if (window_idx != workspace.focused_window_idx) continue;
-
-                const focused_color = config.border.focused_color.toRiverColor();
-                window.river_window.setBorders(
-                    edges,
-                    config.border.width,
-                    focused_color.r,
-                    focused_color.g,
-                    focused_color.b,
-                    focused_color.a,
-                );
-
-                window.river_node.placeTop();
-                river_seat.focusWindow(window.river_window);
-            }
-        }
-
-        if (output_idx != focused_output_idx) continue;
-        if (output.river_layer_shell_output) |layer_shell_output| {
-            layer_shell_output.setDefault();
         }
     }
 }
