@@ -73,7 +73,6 @@ pub const default_keybindings = [_]types.Keybinding{
     .{ .key = "q", .modifiers = .{ .mod4 = true }, .action = .close_window },
     .{ .key = "f", .modifiers = .{ .mod4 = true }, .action = .toggle_maximize },
     .{ .key = "f", .modifiers = .{ .mod4 = true, .shift = true }, .action = .toggle_fullscreen },
-    .{ .key = "v", .modifiers = .{ .mod4 = true }, .action = .toggle_workspace_floating },
 
     .{ .key = "minus", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = -0.1 } },
     .{ .key = "equal", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = 0.1 } },

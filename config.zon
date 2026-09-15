@@ -46,8 +46,8 @@
         .{ .key = "f", .modifiers = .{ .mod4 = true }, .action = .toggle_maximize },
         .{ .key = "f", .modifiers = .{ .mod4 = true, .shift = true }, .action = .toggle_fullscreen },
 
-        // Toggle floating mode for current workspace
-        .{ .key = "v", .modifiers = .{ .mod4 = true }, .action = .toggle_workspace_floating },
+        // Toggle floating mode for the current workspace
+        // .{ .key = "v", .modifiers = .{ .mod4 = true }, .action = .toggle_workspace_floating },
 
         // Decrease focused window's width by 0.1 of the output's available width
         .{ .key = "minus", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = -0.1 } },
@@ -61,6 +61,8 @@
         .{ .key = "Escape", .modifiers = .{ .mod4 = true }, .action = .exit },
         .{ .key = "r", .modifiers = .{ .mod4 = true }, .action = .reload_config },
 
+        // In passthrough mode all other bindings are disabled
+        // to pass keyboard and mouse events to the client window
         // .{ .key = "F11", .modifiers = .{ .mod4 = true }, .action = .toggle_passthrough },
 
         // "Super t" to spawn alacritty
@@ -80,8 +82,8 @@
             .modifiers = .{ .mod4 = true },
             .action = .focus_window_left,
 
-            // Alternatively, use focus_window_or_output_left to focus the left window,
-            // or focus the left output when no window is present on the left
+            // Alternatively, use focus_window_or_output_left to focus the left window
+            // or the left output when no window is present on the left
             // .action = .focus_window_or_output_left,
         },
         .{
@@ -156,7 +158,7 @@
         .{ .key = "9", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 9 } },
         .{ .key = "0", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 10 } },
 
-        // Send window away without leaving current workspace
+        // Send window away without leaving the current workspace
         .{
             .key = "Up",
             .modifiers = .{ .mod4 = true, .ctrl = true },
