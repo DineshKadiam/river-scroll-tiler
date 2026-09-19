@@ -13,16 +13,20 @@ const types = @import("types.zig");
 const window = @import("window.zig");
 
 pub fn main(init: std.process.Init) !void {
-    // Die when our parent (typically river -c rill) dies, so we don't
-    // get reparented to init and outlive the session if river crashes
-    // or is killed.
     _ = std.os.linux.prctl(
         @intFromEnum(std.os.linux.PR.SET_PDEATHSIG),
-        @intCast(@intFromEnum(std.posix.SIG.TERM)),
+        @intFromEnum(std.posix.SIG.TERM),
         0,
         0,
         0,
     );
+
+    const sa = std.posix.Sigaction{
+        .handler = .{ .handler = std.posix.SIG.DFL },
+        .mask = std.posix.sigemptyset(),
+        .flags = std.posix.SA.NOCLDWAIT,
+    };
+    std.posix.sigaction(std.posix.SIG.CHLD, &sa, null);
 
     const display = try wayland.client.wl.Display.connect(null);
     defer display.disconnect();

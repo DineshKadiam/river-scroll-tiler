@@ -153,16 +153,7 @@ fn keybindingPressed(
             return;
         },
         .spawn => |command| {
-            const pid = std.posix.system.fork();
-
-            if (pid < 0) {
-                return;
-            } else if (pid == 0) {
-                _ = try std.process.spawn(io, .{ .argv = command });
-                std.process.exit(0);
-            }
-
-            _ = std.posix.system.waitpid(pid, null, 0);
+            _ = try std.process.spawn(io, .{ .argv = command });
             return;
         },
         .focus_window_left => {
