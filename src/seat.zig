@@ -105,10 +105,7 @@ pub fn layerShellSeatListener(
     }
 }
 
-pub fn setupPointerBindings(
-    allocator: std.mem.Allocator,
-    wm: *types.WindowManager,
-) !void {
+pub fn setupPointerBindings(gpa: std.mem.Allocator, wm: *types.WindowManager) !void {
     const river_seat = wm.river_seat orelse return;
 
     for (wm.pointer_binding_list.items) |pointer_binding| {
@@ -116,17 +113,14 @@ pub fn setupPointerBindings(
     }
     wm.pointer_binding_list.clearRetainingCapacity();
 
-    const pointer_bindings =
-        wm.config.pointer_bindings orelse &config.default_pointer_bindings;
-
-    for (pointer_bindings) |binding| {
+    for (wm.config.pointer_bindings) |binding| {
         const river_pointer_binding = try river_seat.getPointerBinding(
-            @intFromEnum(binding.button),
+            @backingInt(binding.button),
             binding.modifiers,
         );
 
         try wm.pointer_binding_list.append(
-            allocator,
+            gpa,
             .{ .river_pointer_binding = river_pointer_binding, .action = binding.action },
         );
 

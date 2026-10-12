@@ -13,7 +13,7 @@ A minimalist scrolling window manager for [river](https://isaacfreund.com/softwa
 
 ## Build
 ### Dependencies
-* zig 0.16
+* zig 0.17
 * wayland
 * wayland-protocols
 * xkbcommon

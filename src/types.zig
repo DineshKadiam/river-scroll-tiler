@@ -4,8 +4,9 @@ const wayland = @import("wayland");
 const river = wayland.client.river;
 
 pub const WindowManager = struct {
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     io: std.Io,
+    arena: *std.heap.ArenaAllocator,
     environ_map: *std.process.Environ.Map,
 
     river_window_manager: ?*river.WindowManagerV1,
@@ -32,18 +33,16 @@ pub const WindowManager = struct {
     is_passthrough: bool,
 
     pub fn deinit(self: *WindowManager) void {
-        std.zon.parse.free(self.allocator, self.config);
-
-        self.xkb_binding_list.deinit(self.allocator);
-        self.pointer_binding_list.deinit(self.allocator);
+        self.xkb_binding_list.deinit(self.gpa);
+        self.pointer_binding_list.deinit(self.gpa);
 
         for (self.output_list.items) |*output| {
             for (output.workspace_list.items) |*workspace| {
-                workspace.window_list.deinit(self.allocator);
+                workspace.window_list.deinit(self.gpa);
             }
-            output.workspace_list.deinit(self.allocator);
+            output.workspace_list.deinit(self.gpa);
         }
-        self.output_list.deinit(self.allocator);
+        self.output_list.deinit(self.gpa);
     }
 };
 
@@ -111,9 +110,12 @@ pub const Config = struct {
     animation_duration: u32 = 200,
     cursor: ?struct { theme: [:0]const u8, size: u32 } = null,
 
-    spawn_at_startup: ?[]const []const []const u8 = null,
-    keybindings: ?[]const Keybinding = null,
-    pointer_bindings: ?[]const PointerBinding = null,
+    spawn_at_startup: []const []const []const u8 = &.{},
+    keybindings: []const Keybinding = &default_keybindings,
+    pointer_bindings: []const PointerBinding = &.{
+        .{ .button = .left, .modifiers = .{ .mod4 = true }, .action = .move_window },
+        .{ .button = .right, .modifiers = .{ .mod4 = true }, .action = .resize_window },
+    },
 };
 
 const Border = struct { width: u8, focused_color: Color, unfocused_color: Color };
@@ -220,3 +222,79 @@ const Button = enum(u32) {
 };
 
 const PointerAction = enum { move_window, resize_window };
+
+const default_keybindings = [_]Keybinding{
+    .{ .key = "q", .modifiers = .{ .mod4 = true }, .action = .close_window },
+    .{ .key = "f", .modifiers = .{ .mod4 = true }, .action = .toggle_maximize },
+    .{ .key = "f", .modifiers = .{ .mod4 = true, .shift = true }, .action = .toggle_fullscreen },
+
+    .{ .key = "minus", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = -0.1 } },
+    .{ .key = "equal", .modifiers = .{ .mod4 = true }, .action = .{ .adjust_window_width = 0.1 } },
+
+    .{ .key = "Escape", .modifiers = .{ .mod4 = true }, .action = .exit },
+    .{ .key = "r", .modifiers = .{ .mod4 = true }, .action = .reload_config },
+    .{ .key = "t", .modifiers = .{ .mod4 = true }, .action = .{ .spawn = &[_][]const u8{"alacritty"} } },
+
+    .{ .key = "Left", .modifiers = .{ .mod4 = true }, .action = .focus_window_left },
+    .{ .key = "Right", .modifiers = .{ .mod4 = true }, .action = .focus_window_right },
+
+    .{ .key = "Left", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_left },
+    .{ .key = "Right", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_right },
+
+    .{ .key = "Up", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_above },
+    .{ .key = "Down", .modifiers = .{ .mod4 = true }, .action = .focus_workspace_below },
+
+    .{ .key = "1", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 1 } },
+    .{ .key = "2", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 2 } },
+    .{ .key = "3", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 3 } },
+    .{ .key = "4", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 4 } },
+    .{ .key = "5", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 5 } },
+    .{ .key = "6", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 6 } },
+    .{ .key = "7", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 7 } },
+    .{ .key = "8", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 8 } },
+    .{ .key = "9", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 9 } },
+    .{ .key = "0", .modifiers = .{ .mod4 = true }, .action = .{ .focus_workspace_number = 10 } },
+
+    .{ .key = "Up", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_workspace_above },
+    .{ .key = "Down", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_workspace_below },
+
+    .{ .key = "1", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 1 } },
+    .{ .key = "2", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 2 } },
+    .{ .key = "3", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 3 } },
+    .{ .key = "4", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 4 } },
+    .{ .key = "5", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 5 } },
+    .{ .key = "6", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 6 } },
+    .{ .key = "7", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 7 } },
+    .{ .key = "8", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 8 } },
+    .{ .key = "9", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 9 } },
+    .{ .key = "0", .modifiers = .{ .mod4 = true, .shift = true }, .action = .{ .move_window_to_workspace_number = 10 } },
+
+    .{ .key = "Up", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_workspace_above },
+    .{ .key = "Down", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_workspace_below },
+
+    .{ .key = "1", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 1 } },
+    .{ .key = "2", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 2 } },
+    .{ .key = "3", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 3 } },
+    .{ .key = "4", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 4 } },
+    .{ .key = "5", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 5 } },
+    .{ .key = "6", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 6 } },
+    .{ .key = "7", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 7 } },
+    .{ .key = "8", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 8 } },
+    .{ .key = "9", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 9 } },
+    .{ .key = "0", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .{ .send_window_to_workspace_number = 10 } },
+
+    .{ .key = "h", .modifiers = .{ .mod4 = true }, .action = .focus_output_left },
+    .{ .key = "l", .modifiers = .{ .mod4 = true }, .action = .focus_output_right },
+    .{ .key = "k", .modifiers = .{ .mod4 = true }, .action = .focus_output_above },
+    .{ .key = "j", .modifiers = .{ .mod4 = true }, .action = .focus_output_below },
+
+    .{ .key = "h", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_left },
+    .{ .key = "l", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_right },
+    .{ .key = "k", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_above },
+    .{ .key = "j", .modifiers = .{ .mod4 = true, .shift = true }, .action = .move_window_to_output_below },
+
+    .{ .key = "h", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_left },
+    .{ .key = "l", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_right },
+    .{ .key = "k", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_above },
+    .{ .key = "j", .modifiers = .{ .mod4 = true, .ctrl = true }, .action = .send_window_to_output_below },
+};

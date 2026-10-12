@@ -14,8 +14,8 @@ const window = @import("window.zig");
 
 pub fn main(init: std.process.Init) !void {
     _ = std.os.linux.prctl(
-        @intFromEnum(std.os.linux.PR.SET_PDEATHSIG),
-        @intFromEnum(std.posix.SIG.TERM),
+        @backingInt(std.os.linux.PR.SET_PDEATHSIG),
+        @backingInt(std.posix.SIG.TERM),
         0,
         0,
         0,
@@ -35,8 +35,9 @@ pub fn main(init: std.process.Init) !void {
     defer registry.destroy();
 
     var wm = types.WindowManager{
-        .allocator = init.gpa,
+        .gpa = init.gpa,
         .io = init.io,
+        .arena = init.arena,
         .environ_map = init.environ_map,
         .river_window_manager = null,
         .river_xkb_bindings = null,
@@ -46,7 +47,7 @@ pub fn main(init: std.process.Init) !void {
         .output_list = .empty,
         .xkb_binding_list = .empty,
         .pointer_binding_list = .empty,
-        .config = config.load(init.gpa, init.io, init.environ_map),
+        .config = config.load(init.gpa, init.io, init.arena, init.environ_map),
         .task = .none,
         .focused_output_idx = null,
         .previous_workspace = null,
@@ -60,12 +61,10 @@ pub fn main(init: std.process.Init) !void {
     const window_manager = wm.river_window_manager orelse return;
     window_manager.setListener(*types.WindowManager, windowManagerListener, &wm);
 
-    if (wm.config.spawn_at_startup) |commands| {
-        for (commands) |command| {
-            _ = std.process.spawn(wm.io, .{ .argv = command }) catch |err| {
-                std.debug.print("Failed to spawn {s}: {}\n", .{ command[0], err });
-            };
-        }
+    for (wm.config.spawn_at_startup) |command| {
+        _ = std.process.spawn(wm.io, .{ .argv = command }) catch |err| {
+            std.debug.print("Failed to spawn {s}: {}\n", .{ command[0], err });
+        };
     }
 
     while (true) {
@@ -128,7 +127,7 @@ fn handleWindowManagerEvent(
 ) !void {
     switch (event) {
         .output => |output_event| {
-            try output.add(wm.allocator, output_event.id, wm);
+            try output.add(wm.gpa, output_event.id, wm);
         },
         .seat => |seat_event| {
             seat_event.id.setListener(*types.WindowManager, seat.seatListener, wm);
@@ -147,13 +146,12 @@ fn handleWindowManagerEvent(
             wm.river_layer_shell_seat = river_layer_shell_seat;
         },
         .window => |window_event| {
-            try window.pending_windows.append(wm.allocator, window_event.id);
-
+            try window.pending_windows.append(wm.gpa, window_event.id);
             window_event.id.setListener(*types.WindowManager, window.windowListener, wm);
             wm.task = .prepare_window;
         },
         .manage_start => {
-            try manage(wm.allocator, wm.io, wm);
+            try manage(wm.gpa, wm.io, wm);
             river_window_manager.manageFinish();
         },
         .render_start => river_window_manager.renderFinish(),
@@ -162,7 +160,7 @@ fn handleWindowManagerEvent(
     }
 }
 
-fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) !void {
+fn manage(gpa: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) !void {
     const focused_output_idx = wm.focused_output_idx orelse return;
     const river_window_manager = wm.river_window_manager orelse return;
     const river_seat = wm.river_seat orelse return;
@@ -170,7 +168,7 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) !v
     switch (wm.task) {
         .layout => {
             try layout.apply(
-                wm.allocator,
+                gpa,
                 wm.output_list,
                 focused_output_idx,
                 wm.config,
@@ -198,8 +196,8 @@ fn manage(allocator: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) !v
             );
         },
         .setup_seat => {
-            try keybinding.setupKeybindings(allocator, wm);
-            try seat.setupPointerBindings(allocator, wm);
+            try keybinding.setupKeybindings(gpa, wm);
+            try seat.setupPointerBindings(gpa, wm);
 
             if (wm.config.cursor) |cursor| {
                 river_seat.setXcursorTheme(cursor.theme, cursor.size);

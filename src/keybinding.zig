@@ -10,10 +10,7 @@ const types = @import("types.zig");
 
 const Direction = enum { left, right, above, below };
 
-pub fn setupKeybindings(
-    allocator: std.mem.Allocator,
-    wm: *types.WindowManager,
-) !void {
+pub fn setupKeybindings(gpa: std.mem.Allocator, wm: *types.WindowManager) !void {
     const river_seat = wm.river_seat orelse return;
     const river_xkb_bindings = wm.river_xkb_bindings orelse return;
 
@@ -22,8 +19,7 @@ pub fn setupKeybindings(
     }
     wm.xkb_binding_list.clearRetainingCapacity();
 
-    const keybindings = wm.config.keybindings orelse &config.default_keybindings;
-    for (keybindings) |keybinding| {
+    for (wm.config.keybindings) |keybinding| {
         const keysym = parseKey(keybinding.key) orelse {
             std.debug.print("Failed to parse key '{s}'\n", .{keybinding.key});
             continue;
@@ -31,12 +27,12 @@ pub fn setupKeybindings(
 
         const river_xkb_binding = try river_xkb_bindings.getXkbBinding(
             river_seat,
-            @intFromEnum(keysym),
+            @backingInt(keysym),
             keybinding.modifiers,
         );
 
         try wm.xkb_binding_list.append(
-            allocator,
+            gpa,
             .{ .river_xkb_binding = river_xkb_binding, .action = keybinding.action },
         );
 
@@ -63,10 +59,9 @@ fn xkbBindingListener(
 
         switch (event) {
             .pressed => {
-                keybindingPressed(
-                    wm.allocator,
+                handleKeybindingAction(
+                    wm.gpa,
                     wm.io,
-                    wm.environ_map,
                     binding.action,
                     wm,
                 ) catch |err| {
@@ -79,10 +74,9 @@ fn xkbBindingListener(
     }
 }
 
-fn keybindingPressed(
-    allocator: std.mem.Allocator,
+fn handleKeybindingAction(
+    gpa: std.mem.Allocator,
     io: std.Io,
-    environ_map: *std.process.Environ.Map,
     action: types.KeybindingAction,
     wm: *types.WindowManager,
 ) !void {
@@ -142,8 +136,8 @@ fn keybindingPressed(
             return;
         },
         .reload_config => {
-            std.zon.parse.free(wm.allocator, wm.config);
-            wm.config = config.load(allocator, io, environ_map);
+            _ = wm.arena.reset(.retain_capacity);
+            wm.config = config.load(gpa, io, wm.arena, wm.environ_map);
             wm.task = .setup_seat;
             return;
         },
@@ -273,7 +267,7 @@ fn keybindingPressed(
             if (workspace_idx == 0) return;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &output.workspace_list.items[workspace_idx - 1],
             );
@@ -288,7 +282,7 @@ fn keybindingPressed(
             if (workspace_idx == output.workspace_list.items.len - 1) return;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &output.workspace_list.items[workspace_idx + 1],
             );
@@ -317,7 +311,7 @@ fn keybindingPressed(
                 number - 1 == workspace_idx) return;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &output.workspace_list.items[number - 1],
             );
@@ -332,7 +326,7 @@ fn keybindingPressed(
             if (workspace_idx == 0) return;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &output.workspace_list.items[workspace_idx - 1],
             );
@@ -341,7 +335,7 @@ fn keybindingPressed(
             if (workspace_idx == output.workspace_list.items.len - 1) return;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &output.workspace_list.items[workspace_idx + 1],
             );
@@ -364,7 +358,7 @@ fn keybindingPressed(
                 number - 1 == workspace_idx) return;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &output.workspace_list.items[number - 1],
             );
@@ -432,7 +426,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -454,7 +448,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -476,7 +470,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -498,7 +492,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -520,7 +514,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -536,7 +530,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -552,7 +546,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -568,7 +562,7 @@ fn keybindingPressed(
             const target_workspace_idx = target_output.focused_workspace_idx;
 
             try sendFocusedWindowToWorkspace(
-                allocator,
+                gpa,
                 workspace,
                 &target_output.workspace_list.items[target_workspace_idx],
             );
@@ -579,7 +573,7 @@ fn keybindingPressed(
 }
 
 fn sendFocusedWindowToWorkspace(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     current: *types.Workspace,
     target: *types.Workspace,
 ) !void {
@@ -597,7 +591,7 @@ fn sendFocusedWindowToWorkspace(
         target_window_idx = idx + 1;
     }
 
-    try target.window_list.insert(allocator, target_window_idx, window);
+    try target.window_list.insert(gpa, target_window_idx, window);
     target.focused_window_idx = target_window_idx;
 }
 

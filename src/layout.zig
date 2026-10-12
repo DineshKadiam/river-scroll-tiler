@@ -13,7 +13,7 @@ pub const edges = river.WindowV1.Edges{
 };
 
 pub fn apply(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     output_list: std.ArrayList(types.Output),
     focused_output_idx: usize,
     config: types.Config,
@@ -25,7 +25,7 @@ pub fn apply(
         if (output.river_output == null) continue;
 
         if (config.dynamic_workspaces) {
-            try handleDynamicWorkspaces(allocator, output);
+            try handleDynamicWorkspaces(gpa, output);
         }
 
         const non_exclusive = output.non_exclusive orelse output.rect;
@@ -97,7 +97,7 @@ pub fn apply(
 }
 
 fn handleDynamicWorkspaces(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     output: *types.Output,
 ) !void {
     const focused_idx = output.focused_workspace_idx;
@@ -117,7 +117,7 @@ fn handleDynamicWorkspaces(
         }
     }
 
-    try output.workspace_list.append(allocator, .{});
+    try output.workspace_list.append(gpa, .{});
 }
 
 fn floatingLayout(

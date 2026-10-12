@@ -21,7 +21,7 @@ pub fn windowListener(
         for (pending_windows.items, 0..) |window, idx| {
             if (window != river_window) continue;
 
-            addWindow(wm.allocator, window, output, wm.config) catch |err| {
+            addWindow(wm.gpa, window, output, wm.config) catch |err| {
                 std.debug.print("Failed to add window: {}\n", .{err});
                 return;
             };
@@ -71,7 +71,7 @@ pub fn windowListener(
 }
 
 fn addWindow(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     river_window: *river.WindowV1,
     output: types.Output,
     config: types.Config,
@@ -109,6 +109,6 @@ fn addWindow(
         window_idx = idx + 1;
     }
 
-    try workspace.window_list.insert(allocator, window_idx, window);
+    try workspace.window_list.insert(gpa, window_idx, window);
     workspace.focused_window_idx = window_idx;
 }

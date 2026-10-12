@@ -7,7 +7,7 @@ const layout = @import("layout.zig");
 const types = @import("types.zig");
 
 pub fn add(
-    allocator: std.mem.Allocator,
+    gpa: std.mem.Allocator,
     river_output: *river.OutputV1,
     wm: *types.WindowManager,
 ) !void {
@@ -28,7 +28,7 @@ pub fn add(
 
     var workspace_list = std.ArrayList(types.Workspace).empty;
     while (workspace_count > 0) : (workspace_count -= 1) {
-        try workspace_list.append(allocator, .{});
+        try workspace_list.append(gpa, .{});
     }
 
     const output = types.Output{
@@ -40,7 +40,7 @@ pub fn add(
         .non_exclusive = null,
     };
 
-    try wm.output_list.append(allocator, output);
+    try wm.output_list.append(gpa, output);
     wm.focused_output_idx = wm.output_list.items.len - 1;
 }
 
