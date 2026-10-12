@@ -50,14 +50,8 @@ pub fn windowListener(
                             workspace.focused_window_idx = focused_idx - 1;
                         }
                     },
-                    .fullscreen_requested => {
-                        if (wm.task != .none) return;
-                        window.is_fullscreen = true;
-                    },
-                    .exit_fullscreen_requested => {
-                        if (wm.task != .none) return;
-                        window.is_fullscreen = false;
-                    },
+                    .fullscreen_requested => window.is_fullscreen = true,
+                    .exit_fullscreen_requested => window.is_fullscreen = false,
                     else => return,
                 }
 
