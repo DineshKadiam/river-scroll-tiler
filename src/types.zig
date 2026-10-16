@@ -17,6 +17,8 @@ pub const WindowManager = struct {
     river_layer_shell_seat: ?*river.LayerShellSeatV1,
 
     output_list: std.ArrayList(Output),
+    pending_windows_list: std.ArrayList(*river.WindowV1),
+
     xkb_binding_list: std.ArrayList(struct {
         river_xkb_binding: *river.XkbBindingV1,
         action: KeybindingAction,
@@ -33,16 +35,17 @@ pub const WindowManager = struct {
     is_passthrough: bool,
 
     pub fn deinit(self: *WindowManager) void {
-        self.xkb_binding_list.deinit(self.gpa);
-        self.pointer_binding_list.deinit(self.gpa);
-
         for (self.output_list.items) |*output| {
             for (output.workspace_list.items) |*workspace| {
                 workspace.window_list.deinit(self.gpa);
             }
             output.workspace_list.deinit(self.gpa);
         }
+
         self.output_list.deinit(self.gpa);
+        self.pending_windows_list.deinit(self.gpa);
+        self.xkb_binding_list.deinit(self.gpa);
+        self.pointer_binding_list.deinit(self.gpa);
     }
 };
 

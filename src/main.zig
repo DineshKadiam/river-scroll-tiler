@@ -45,6 +45,7 @@ pub fn main(init: std.process.Init) !void {
         .river_seat = null,
         .river_layer_shell_seat = null,
         .output_list = .empty,
+        .pending_windows_list = .empty,
         .xkb_binding_list = .empty,
         .pointer_binding_list = .empty,
         .config = config.load(init.gpa, init.io, init.arena, init.environ_map),
@@ -146,7 +147,7 @@ fn handleWindowManagerEvent(
             wm.river_layer_shell_seat = river_layer_shell_seat;
         },
         .window => |window_event| {
-            try window.pending_windows.append(wm.gpa, window_event.id);
+            try wm.pending_windows_list.append(wm.gpa, window_event.id);
             window_event.id.setListener(*types.WindowManager, window.windowListener, wm);
             wm.task = .prepare_window;
         },
@@ -207,7 +208,7 @@ fn manage(gpa: std.mem.Allocator, io: std.Io, wm: *types.WindowManager) !void {
             river_window_manager.manageDirty();
         },
         .prepare_window => {
-            for (window.pending_windows.items) |pending_window| {
+            for (wm.pending_windows_list.items) |pending_window| {
                 if (wm.config.no_csd) pending_window.useSsd();
                 pending_window.setTiled(layout.edges);
                 pending_window.hide();
