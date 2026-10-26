@@ -1,3 +1,5 @@
+> Originally developed at [codeberg.org/lzj15/rill](https://codeberg.org/lzj15/rill) · MIT
+
 # Rill
 A minimalist scrolling window manager for [river](https://isaacfreund.com/software/river/), implementing the [river-window-management-v1](https://isaacfreund.com/docs/wayland/river-window-management-v1/) protocol
 
